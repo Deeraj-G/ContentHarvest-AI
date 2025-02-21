@@ -1,13 +1,17 @@
-import requests
+"""
+A simple web scraper that scrapes a URL and returns the keywords and their associated information.
+"""
 from flask import Flask, render_template, request
 
 from functions import identify_keywords, scrape_url
 
 app = Flask(__name__)
 
-
 @app.route("/web_scraper/", methods=["GET", "POST"])
 def index():
+    """
+    This function handles the web scraper.
+    """
     if request.method == "POST":
         url = request.form["url"]
         try:

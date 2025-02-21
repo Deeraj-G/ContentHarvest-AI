@@ -3,7 +3,6 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from loguru import logger
 from openai import OpenAI
 
 load_dotenv()
@@ -13,21 +12,27 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # Scrape the URL and return the text
-# TODO: Scrape based on bolded words (these are the most important words)
-def scrape_url(url):
+# Scrape based on bolded words (these are the most important words)
+def scrape_url(url: str) -> str:
+    """
+    This function scrapes a URL and returns the text.
+    """
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)  # 10 second timeout
         soup = BeautifulSoup(response.text, "html.parser")
         # Clean the text and limit length
         text = " ".join(soup.get_text().split())  # Remove extra whitespace
         text = text[:4000]  # Limit to 4000 characters
         return text
-    except:
-        return "Error fetching URL"
+    except Exception as e:
+        return f"Error during web scraping: {e}"
 
 
 # Query to LLM to identify the relevant information based on the text
-def identify_keywords(text: str):
+def identify_keywords(text: str) -> str:
+    """
+    This function identifies the keywords in the text and returns the information associated with each keyword.
+    """
     # Static keywords for now
     keywords = ["History", "Components", "Features"]
 
@@ -66,6 +71,7 @@ def identify_keywords(text: str):
         "https://api.openai.com/v1/chat/completions",
         headers=headers,
         json={"model": "gpt-3.5-turbo", "messages": messages},
+        timeout=30  # 30 second timeout for AI response
     )
 
     response = response.json()
