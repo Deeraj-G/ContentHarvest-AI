@@ -12,8 +12,8 @@ def index():
         url = request.form["url"]
         try:
             return identify_keywords(scrape_url(url))
-        except:
-            return "Error fetching URL"
+        except Exception as e:
+            return f"Error during web scraping: {e}"
     return render_template("index.html")
 
 
