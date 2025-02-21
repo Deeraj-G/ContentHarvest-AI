@@ -12,7 +12,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 
-# Scrape the URL and return the HTML
+# Scrape the URL and return the text
+# TODO: Scrape based on bolded words (these are the most important words)
 def scrape_url(url):
     try:
         response = requests.get(url)
@@ -35,6 +36,9 @@ def identify_keywords(text: str):
             "History": "The history of the company is that it started in 1990 and is a software company.",
             "Components": "The components of the product are HTML, CSS, and JavaScript built on Monolithic architecture.",
             "Features": "The features of the product are that it is lightweight, fast, and scalable.",
+        },
+        {
+            ""
         }
     ]
 
