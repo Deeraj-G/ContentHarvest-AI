@@ -1,3 +1,7 @@
+"""
+This file contains the functions for the web scraper.
+"""
+
 import os
 
 import requests
@@ -43,10 +47,16 @@ def identify_keywords(text: str) -> str:
             "Features": "The features of the product are that it is lightweight, fast, and scalable.",
         },
         {
-            "Images": ["https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png/200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png", "https://en.wikipedia.org/wiki/File:General_Formal_Ontology.svg"],
-            "Links": ["https://en.wikipedia.org/wiki/Knowledge_engineering", "https://en.wikipedia.org/wiki/Markov_decision_process"],
+            "Images": [
+                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png/200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png",
+                "https://en.wikipedia.org/wiki/File:General_Formal_Ontology.svg",
+            ],
+            "Links": [
+                "https://en.wikipedia.org/wiki/Knowledge_engineering",
+                "https://en.wikipedia.org/wiki/Markov_decision_process",
+            ],
             "Tags": ["h1", "h2", "h3", "h4", "h5", "h6"],
-        }
+        },
     ]
 
     system_prompt = "You are a helpful assistant that identifies the information associated with given keywords."
@@ -71,7 +81,7 @@ def identify_keywords(text: str) -> str:
         "https://api.openai.com/v1/chat/completions",
         headers=headers,
         json={"model": "gpt-3.5-turbo", "messages": messages},
-        timeout=30  # 30 second timeout for AI response
+        timeout=30,  # 30 second timeout for AI response
     )
 
     response = response.json()

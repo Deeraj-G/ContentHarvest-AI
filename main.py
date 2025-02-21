@@ -1,6 +1,7 @@
 """
 A simple web scraper that scrapes a URL and returns the keywords and their associated information.
 """
+
 from flask import Flask, render_template, request
 
 from functions import identify_keywords, scrape_url
@@ -16,6 +17,7 @@ def index():
         url = request.form["url"]
         try:
             return identify_keywords(scrape_url(url))
+        # General exception handling
         except Exception as e:
             return f"Error during web scraping: {e}"
     return render_template("index.html")
