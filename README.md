@@ -1,6 +1,6 @@
-# web_scraper
+# Web Scraper
 
-A simple web scraper that scrapes a URL and returns the text.
+A simple web scraper that scrapes a URL and returns the keywords and their associated information.
 
 ## Usage
 
