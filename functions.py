@@ -38,7 +38,9 @@ def identify_keywords(text: str):
             "Features": "The features of the product are that it is lightweight, fast, and scalable.",
         },
         {
-            ""
+            "Images": ["https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png/200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png", "https://en.wikipedia.org/wiki/File:General_Formal_Ontology.svg"],
+            "Links": ["https://en.wikipedia.org/wiki/Knowledge_engineering", "https://en.wikipedia.org/wiki/Markov_decision_process"],
+            "Tags": ["h1", "h2", "h3", "h4", "h5", "h6"],
         }
     ]
 
