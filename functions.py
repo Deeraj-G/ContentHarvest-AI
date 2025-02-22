@@ -30,16 +30,16 @@ def scrape_url(url: str) -> str:
         return text
     except Exception as e:
         return f"Error during web scraping: {e}"
-    
+
 
 def web_scrape_wrapper(url: str) -> dict:
     """
     A wrapper function for the web scraping function.
     Return in a format more suitable for the LLM.
-    
+
     Args:
         url (str): The URL to scrape
-        
+
     Returns:
         dict: {
             "success": bool,
@@ -59,26 +59,21 @@ def web_scrape_wrapper(url: str) -> dict:
             "error": None,
             "metadata": {
                 "length": len(scraped_text),
-                "truncated": len(scraped_text) >= 4000
-            }
+                "truncated": len(scraped_text) >= 4000,
+            },
         }
     except Exception as e:
-        return {
-            "success": False,
-            "text": None,
-            "error": str(e),
-            "metadata": None
-        }
+        return {"success": False, "text": None, "error": str(e), "metadata": None}
 
 
 # Query to LLM to identify the relevant information based on the text
 def identify_keywords(text_wrapper: dict) -> dict:
     """
     This function identifies the keywords in the text and returns the information associated with each keyword.
-    
+
     Args:
         text_wrapper (dict): The output from web_scrape_wrapper containing text and metadata
-        
+
     Returns:
         dict: {
             "success": bool,
@@ -96,7 +91,7 @@ def identify_keywords(text_wrapper: dict) -> dict:
             "success": False,
             "keywords": None,
             "error": f"Web scraping failed: {text_wrapper['error']}",
-            "metadata": None
+            "metadata": None,
         }
 
     # Static keywords for now
@@ -151,13 +146,13 @@ def identify_keywords(text_wrapper: dict) -> dict:
             "error": None,
             "metadata": {
                 "source_length": text_wrapper["metadata"]["length"],
-                "source_truncated": text_wrapper["metadata"]["truncated"]
-            }
+                "source_truncated": text_wrapper["metadata"]["truncated"],
+            },
         }
     except Exception as e:
         return {
             "success": False,
             "keywords": None,
             "error": f"Error during keyword identification: {e}",
-            "metadata": text_wrapper["metadata"]
+            "metadata": text_wrapper["metadata"],
         }

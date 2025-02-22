@@ -8,6 +8,7 @@ from functions import identify_keywords, scrape_url
 
 app = Flask(__name__)
 
+
 @app.route("/web_scraper/", methods=["GET", "POST"])
 def index():
     """

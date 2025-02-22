@@ -3,13 +3,15 @@ This file contains the tool calls for the LLM
 """
 
 import os
-from openai import OpenAI
+
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
+
 
 def get_web_scrape_tool() -> dict:
     """Returns the web scraping tool configuration for LLM."""
@@ -23,13 +25,14 @@ def get_web_scrape_tool() -> dict:
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "The URL to scrape. Must be a valid HTTP/HTTPS URL."
+                        "description": "The URL to scrape. Must be a valid HTTP/HTTPS URL.",
                     }
                 },
-                "required": ["url"]
-            }
-        }
+                "required": ["url"],
+            },
+        },
     }
+
 
 def web_scrape(url: str) -> dict:
     """
@@ -39,8 +42,7 @@ def web_scrape(url: str) -> dict:
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": f"Please scrape this webpage {url}"}],
         tools=[get_web_scrape_tool()],
-        tool_choice="auto"
+        tool_choice="auto",
     )
 
     return response["choices"][0]["message"]["content"]
-
