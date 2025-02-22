@@ -26,7 +26,6 @@ def scrape_url(url: str) -> str:
         soup = BeautifulSoup(response.text, "html.parser")
         # Clean the text and limit length
         text = " ".join(soup.get_text().split())  # Remove extra whitespace
-        text = text[:4000]  # Limit to 4000 characters
         return text
     except Exception as e:
         return f"Error during web scraping: {e}"
@@ -119,7 +118,7 @@ def identify_keywords(text_wrapper: dict) -> dict:
     system_prompt = "You are a helpful assistant that identifies the information associated with given keywords."
 
     user_prompt = f"""
-        Identify the information associate with each keyword: ```{keywords}``` from the following text: ```{text_wrapper["text"]}```.
+        Identify the information associate with each keyword: ```{keywords}``` from the following text: ```{text_wrapper["text"][:4000]}```.
         Return the information in a json with the format: ```keyword: relevant_information```.
         Use the examples as a guide: {examples}
     """
