@@ -52,4 +52,31 @@ class QdrantVectorStore:
 
         return self.client
 
+    def insert_data_to_qdrant(self, collection_name: str, vector_payload: list):
+        """
+        Insert vector embeddings and their associated payloads into Qdrant
+
+        Args:
+            collection_name (str): Name of the collection to insert data into
+            vector_payload (list): List of dictionaries containing vectors and payloads
+                                   Each dict should have 'vector' and 'payload' keys
+
+        Returns:
+            info: Response from Qdrant about the insertion operation
+        """
+        info = self.client.upsert(
+            collection_name=collection_name,
+            wait=True,  # Wait for operation to complete
+            points=[
+                PointStruct(
+                    id=str(uuid.uuid4()),  # Generate unique ID for each point
+                    vector=vector_set.get("vector"),  # The vector embedding
+                    payload=vector_set.get("payload"),  # Associated metadata/payload
+                )
+                for vector_set in vector_payload
+            ],
+        )
+
+        return info
+
     
