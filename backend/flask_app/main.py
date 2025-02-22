@@ -3,11 +3,12 @@ A simple web scraper that scrapes a URL and returns the keywords and their assoc
 """
 
 from flask import Flask, render_template, request
+from flask_cors import CORS
 
-from helpers.functions import identify_keywords, scrape_url
+from backend.helpers.functions import identify_keywords, web_scrape_wrapper
 
 app = Flask(__name__)
-
+CORS(app)
 
 @app.route("/web_scraper/", methods=["GET", "POST"])
 def index():
@@ -17,7 +18,7 @@ def index():
     if request.method == "POST":
         url = request.form["url"]
         try:
-            return identify_keywords(scrape_url(url))
+            return identify_keywords(web_scrape_wrapper(url))
         # General exception handling
         except Exception as e:
             return f"Error during web scraping: {e}"
