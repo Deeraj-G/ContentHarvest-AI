@@ -4,7 +4,7 @@ A simple web scraper that scrapes a URL and returns the keywords and their assoc
 
 from flask import Flask, render_template, request
 
-from functions import identify_keywords, scrape_url
+from helpers.functions import identify_keywords, scrape_url
 
 app = Flask(__name__)
 
