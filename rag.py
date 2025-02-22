@@ -79,4 +79,36 @@ class QdrantVectorStore:
 
         return info
 
-    
+    def search_data_from_qdrant(
+        self, collection_name: str, query: str, tenant_id: str = None, limit: int = 5
+    ):
+        """
+        Search data from Qdrant vector database
+
+        Args:
+            collection_name (str): Name of the Qdrant collection to search in
+            query (str): The search query text
+            tenant_id (str): Optional filter to search for specific tenant_id
+            limit (int): Maximum number of results to return (default: 10)
+
+        Returns:
+            List of search results from Qdrant, ordered by relevance
+        """
+        # Initialize empty filter list for search conditions
+        filter_list = []
+
+        # If tenant_id is provided, add it as a filter condition
+        if tenant_id:
+            filter_list.append(
+                models.FieldCondition(
+                    key="tenant_id", match=models.MatchValue(value=tenant_id)
+                )
+            )
+
+        # Perform the search using Qdrant client
+        return self.client.search(
+            collection_name=collection_name,
+            query_text=query,
+            tenant_id=tenant_id,
+            limit=limit,
+        )
