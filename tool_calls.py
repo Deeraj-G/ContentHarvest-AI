@@ -5,7 +5,6 @@ This file contains the tool calls for the LLM
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from functions import scrape_url
 
 load_dotenv()
 
@@ -31,44 +30,6 @@ def get_web_scrape_tool() -> dict:
             }
         }
     }
-
-def web_scrape_wrapper(url: str) -> dict:
-    """
-    A wrapper function for the web scraping function.
-    Return in a format more suitable for the LLM.
-    
-    Args:
-        url (str): The URL to scrape
-        
-    Returns:
-        dict: {
-            "success": bool,
-            "text": str | None,
-            "error": str | None,
-            "metadata": {
-                "length": int,
-                "truncated": bool
-            }
-        }
-    """
-    try:
-        scraped_text = scrape_url(url)
-        return {
-            "success": True,
-            "text": scraped_text,
-            "error": None,
-            "metadata": {
-                "length": len(scraped_text),
-                "truncated": len(scraped_text) >= 4000
-            }
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "text": None,
-            "error": str(e),
-            "metadata": None
-        }
 
 def web_scrape(url: str) -> dict:
     """

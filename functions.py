@@ -30,13 +30,75 @@ def scrape_url(url: str) -> str:
         return text
     except Exception as e:
         return f"Error during web scraping: {e}"
+    
+
+def web_scrape_wrapper(url: str) -> dict:
+    """
+    A wrapper function for the web scraping function.
+    Return in a format more suitable for the LLM.
+    
+    Args:
+        url (str): The URL to scrape
+        
+    Returns:
+        dict: {
+            "success": bool,
+            "text": str | None,
+            "error": str | None,
+            "metadata": {
+                "length": int,
+                "truncated": bool
+            }
+        }
+    """
+    try:
+        scraped_text = scrape_url(url)
+        return {
+            "success": True,
+            "text": scraped_text,
+            "error": None,
+            "metadata": {
+                "length": len(scraped_text),
+                "truncated": len(scraped_text) >= 4000
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "text": None,
+            "error": str(e),
+            "metadata": None
+        }
 
 
 # Query to LLM to identify the relevant information based on the text
-def identify_keywords(text: str) -> str:
+def identify_keywords(text_wrapper: dict) -> dict:
     """
     This function identifies the keywords in the text and returns the information associated with each keyword.
+    
+    Args:
+        text_wrapper (dict): The output from web_scrape_wrapper containing text and metadata
+        
+    Returns:
+        dict: {
+            "success": bool,
+            "keywords": dict | None,  # Keyword information if successful
+            "error": str | None,
+            "metadata": {
+                "source_length": int,
+                "source_truncated": bool
+            }
+        }
     """
+    # First check if the web scraping was successful
+    if not text_wrapper["success"]:
+        return {
+            "success": False,
+            "keywords": None,
+            "error": f"Web scraping failed: {text_wrapper['error']}",
+            "metadata": None
+        }
+
     # Static keywords for now
     keywords = ["History", "Components", "Features"]
 
@@ -62,7 +124,7 @@ def identify_keywords(text: str) -> str:
     system_prompt = "You are a helpful assistant that identifies the information associated with given keywords."
 
     user_prompt = f"""
-        Identify the information associate with each keyword: ```{keywords}``` from the following text: ```{text}```.
+        Identify the information associate with each keyword: ```{keywords}``` from the following text: ```{text_wrapper["text"]}```.
         Return the information in a json with the format: ```keyword: relevant_information```.
         Use the examples as a guide: {examples}
     """
@@ -72,18 +134,30 @@ def identify_keywords(text: str) -> str:
         {"role": "system", "content": system_prompt},
     ]
 
-    headers = {
-        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
-        "Content-Type": "application/json",
-    }
+    # Call the LLM
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            timeout=30,  # 30 second timeout for AI response
+        )
 
-    response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json={"model": "gpt-3.5-turbo", "messages": messages},
-        timeout=30,  # 30 second timeout for AI response
-    )
+        response = response.model_dump()
+        keywords_content = response["choices"][0]["message"]["content"]
 
-    response = response.json()
-
-    return response["choices"][0]["message"]["content"]
+        return {
+            "success": True,
+            "keywords": keywords_content,
+            "error": None,
+            "metadata": {
+                "source_length": text_wrapper["metadata"]["length"],
+                "source_truncated": text_wrapper["metadata"]["truncated"]
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "keywords": None,
+            "error": f"Error during keyword identification: {e}",
+            "metadata": text_wrapper["metadata"]
+        }
