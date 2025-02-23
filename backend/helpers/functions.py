@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -43,7 +44,7 @@ def scrape_url(url: str) -> str:
         soup = BeautifulSoup(response.text, "html.parser")
         # Clean the text and limit length
         all_text = soup.get_text(separator=" ")
-        all_text = re.sub(r"\s+", " ", all_text) # Remove extra whitespace
+        all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
 
         links = []
 
@@ -59,7 +60,7 @@ def scrape_url(url: str) -> str:
             elif src:
                 link_info["url"] = src
                 link_info["text"] = tag.text
-            
+
             if link_info:
                 common = ["title", "rel"]
                 for attr in common:
@@ -77,9 +78,9 @@ def scrape_url(url: str) -> str:
             "metadata": {
                 "text_length": len(all_text),
                 "links_count": len(links),
-                "truncated": len(all_text) >= 4000
+                "truncated": len(all_text) >= 4000,
             },
-            "error": None
+            "error": None,
         }
         return result
     except Exception as e:
@@ -89,17 +90,17 @@ def scrape_url(url: str) -> str:
             "all_text": None,
             "links": None,
             "metadata": None,
-            "error": str(e)
+            "error": str(e),
         }
 
 
 # Query to LLM to identify the relevant information based on the text
-def identify_keywords(text_wrapper: dict) -> dict:
+def relevant_information(scrape_result: dict) -> dict:
     """
     This function identifies the keywords in the text and returns the information associated with each keyword.
 
     Args:
-        text_wrapper (dict): The output from web_scrape_wrapper containing text and metadata
+        scrape_result (dict): The output from scrape_url containing text, links, and metadata
 
     Returns:
         dict: {
@@ -108,21 +109,20 @@ def identify_keywords(text_wrapper: dict) -> dict:
             "error": str | None,
             "metadata": {
                 "source_length": int,
-                "source_truncated": bool
+                "source_truncated": bool,
+                "links_count": int
             }
         }
     """
+
     # First check if the web scraping was successful
-    if not text_wrapper["success"]:
+    if not scrape_result["success"]:
         return {
             "success": False,
             "keywords": None,
-            "error": f"Web scraping failed: {text_wrapper['error']}",
+            "error": f"Web scraping failed: {scrape_result['error']}",
             "metadata": None,
         }
-
-    # Static keywords for now
-    keywords = ["History", "Components", "Features"]
 
     examples = [
         {
@@ -139,21 +139,21 @@ def identify_keywords(text_wrapper: dict) -> dict:
                 "https://en.wikipedia.org/wiki/Knowledge_engineering",
                 "https://en.wikipedia.org/wiki/Markov_decision_process",
             ],
-            "Tags": ["h1", "h2", "h3", "h4", "h5", "h6"],
         },
     ]
 
-    system_prompt = "You are a helpful assistant that identifies the information associated with given keywords."
+    system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
 
     user_prompt = f"""
-        Identify the information associate with each keyword: ```{keywords}``` from the following text: ```{text_wrapper["text"][:4000]}```.
+        Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
+        The page contains {len(scrape_result["links"])} links. Here are some relevant links: {scrape_result["links"][:10]}
         Return the information in a json with the format: ```keyword: relevant_information```.
         Use the examples as a guide: {examples}
     """
 
     messages = [
-        {"role": "user", "content": user_prompt},
         {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
     ]
 
     # Call the LLM
@@ -172,8 +172,9 @@ def identify_keywords(text_wrapper: dict) -> dict:
             "keywords": keywords_content,
             "error": None,
             "metadata": {
-                "source_length": text_wrapper["metadata"]["length"],
-                "source_truncated": text_wrapper["metadata"]["truncated"],
+                "source_length": scrape_result["metadata"]["text_length"],
+                "source_truncated": scrape_result["metadata"]["truncated"],
+                "links_count": scrape_result["metadata"]["links_count"],
             },
         }
     except Exception as e:
@@ -181,5 +182,5 @@ def identify_keywords(text_wrapper: dict) -> dict:
             "success": False,
             "keywords": None,
             "error": f"Error during keyword identification: {e}",
-            "metadata": text_wrapper["metadata"],
+            "metadata": scrape_result["metadata"],
         }
