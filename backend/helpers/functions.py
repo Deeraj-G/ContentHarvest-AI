@@ -46,38 +46,31 @@ def scrape_url(url: str) -> str:
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
 
-        links = []
+        headings = []
 
-        # Find all links within the url with href or src
-        for tag in soup.find_all(["a", "link"]):
-            link_info = {}
-            href = tag.get("href")
-            src = tag.get("src")
+        # Find all headings within the url
+        for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
+            heading_info = {
+                "level": int(tag.name[1]),  # Get heading level (1-6)
+                "text": tag.get_text(strip=True),  # Get cleaned text content
+                "id": tag.get("id", ""),  # Get id if exists (useful for anchor links)
+            }
+            
+            # If there's a link inside the heading, capture it
+            link = tag.find("a")
+            if link:
+                heading_info["link"] = link.get("href", "")
 
-            if href:
-                link_info["url"] = href
-                link_info["text"] = tag.text
-            elif src:
-                link_info["url"] = src
-                link_info["text"] = tag.text
-
-            if link_info:
-                common = ["title", "rel"]
-                for attr in common:
-                    value = tag.get(attr)
-                    if value:
-                        link_info[attr] = value
-
-                links.append(link_info)
+            headings.append(heading_info)
 
         result = {
             "success": True,
             "original_url": url,
             "all_text": all_text,
-            "links": links,
+            "headings": headings,
             "metadata": {
                 "text_length": len(all_text),
-                "links_count": len(links),
+                "headings_count": len(headings),
                 "truncated": len(all_text) >= 4000,
             },
             "error": None,
@@ -88,7 +81,7 @@ def scrape_url(url: str) -> str:
             "success": False,
             "original_url": url,
             "all_text": None,
-            "links": None,
+            "headings": None,
             "metadata": None,
             "error": str(e),
         }
@@ -146,7 +139,7 @@ def relevant_information(scrape_result: dict) -> dict:
 
     user_prompt = f"""
         Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
-        The page contains {len(scrape_result["links"])} links. Here are some relevant links: {scrape_result["links"][:10]}
+        The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: {scrape_result["headings"][:10]}
         Return the information in a json with the format: ```keyword: relevant_information```.
         Use the examples as a guide: {examples}
     """
@@ -174,7 +167,7 @@ def relevant_information(scrape_result: dict) -> dict:
             "metadata": {
                 "source_length": scrape_result["metadata"]["text_length"],
                 "source_truncated": scrape_result["metadata"]["truncated"],
-                "links_count": scrape_result["metadata"]["links_count"],
+                "headings_count": scrape_result["metadata"]["headings_count"],
             },
         }
     except Exception as e:
