@@ -3,12 +3,12 @@ This file contains the functions for the web scraper.
 """
 
 import os
+import re
 
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
-
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -19,22 +19,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # Scrape based on bolded words (these are the most important words)
 def scrape_url(url: str) -> str:
     """
-    This function scrapes a URL and returns the text.
-    """
-    try:
-        response = requests.get(url, timeout=10)  # 10 second timeout
-        soup = BeautifulSoup(response.text, "html.parser")
-        # Clean the text and limit length
-        text = " ".join(soup.get_text().split())  # Remove extra whitespace
-        return text
-    except Exception as e:
-        return f"Error during web scraping: {e}"
-
-
-def web_scrape_wrapper(url: str) -> dict:
-    """
-    A wrapper function for the web scraping function.
-    Return in a format more suitable for the LLM.
+    Scrapes a URL and returns the content with metadata.
 
     Args:
         url (str): The URL to scrape
@@ -42,27 +27,70 @@ def web_scrape_wrapper(url: str) -> dict:
     Returns:
         dict: {
             "success": bool,
-            "text": str | None,
-            "error": str | None,
+            "url": str,
+            "all_text": str,
+            "links": list[dict],
             "metadata": {
-                "length": int,
+                "text_length": int,
+                "links_count": int,
                 "truncated": bool
-            }
+            },
+            "error": str | None
         }
     """
     try:
-        scraped_text = scrape_url(url)
-        return {
+        response = requests.get(url, timeout=10)  # 10 second timeout
+        soup = BeautifulSoup(response.text, "html.parser")
+        # Clean the text and limit length
+        all_text = soup.get_text(separator=" ")
+        all_text = re.sub(r"\s+", " ", all_text) # Remove extra whitespace
+
+        links = []
+
+        # Find all links within the url with href or src
+        for tag in soup.find_all(["a", "link"]):
+            link_info = {}
+            href = tag.get("href")
+            src = tag.get("src")
+
+            if href:
+                link_info["url"] = href
+                link_info["text"] = tag.text
+            elif src:
+                link_info["url"] = src
+                link_info["text"] = tag.text
+            
+            if link_info:
+                common = ["title", "rel"]
+                for attr in common:
+                    value = tag.get(attr)
+                    if value:
+                        link_info[attr] = value
+
+                links.append(link_info)
+
+        result = {
             "success": True,
-            "text": scraped_text,
-            "error": None,
+            "original_url": url,
+            "all_text": all_text,
+            "links": links,
             "metadata": {
-                "length": len(scraped_text),
-                "truncated": len(scraped_text) >= 4000,
+                "text_length": len(all_text),
+                "links_count": len(links),
+                "truncated": len(all_text) >= 4000
             },
+            "error": None
         }
+        return result
     except Exception as e:
-        return {"success": False, "text": None, "error": str(e), "metadata": None}
+        return {
+            "success": False,
+            "original_url": url,
+            "all_text": None,
+            "links": None,
+            "metadata": None,
+            "error": str(e)
+        }
 
 
 # Query to LLM to identify the relevant information based on the text
