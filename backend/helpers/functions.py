@@ -117,22 +117,27 @@ def relevant_information(scrape_result: dict) -> dict:
             "metadata": None,
         }
 
-    examples = [
+    example_input = [
         {
-            "History": "The history of the company is that it started in 1990 and is a software company.",
-            "Components": "The components of the product are HTML, CSS, and JavaScript built on Monolithic architecture.",
-            "Features": "The features of the product are that it is lightweight, fast, and scalable.",
+            "url": "https://en.wikipedia.org/wiki/Knowledge_engineering",
+            "text": "Knowledge engineering",
+            "title": "Learn more about knowledge engineering"
         },
         {
-            "Images": [
-                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png/200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png",
-                "https://en.wikipedia.org/wiki/File:General_Formal_Ontology.svg",
-            ],
-            "Links": [
-                "https://en.wikipedia.org/wiki/Knowledge_engineering",
-                "https://en.wikipedia.org/wiki/Markov_decision_process",
-            ],
-        },
+            "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png",
+            "text": "AI Icon",
+            "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png"
+        }
+    ]
+
+    example_output = [
+        {
+            "content": {
+                "Content Analysis": "The content appears to focus on artificial intelligence and knowledge engineering concepts. The presence of DALL-E 3 imagery suggests a focus on generative AI technologies.",
+                "Key Topics": "The main topics covered include knowledge engineering, Markov decision processes, and formal ontology structures, indicating this is likely technical or academic content.",
+                "Visual Elements": "The page contains AI-related imagery, including a DALL-E 3 icon and a diagram showing General Formal Ontology structures.",
+            },
+        }
     ]
 
     system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
@@ -141,7 +146,7 @@ def relevant_information(scrape_result: dict) -> dict:
         Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
         The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: {scrape_result["headings"][:10]}
         Return the information in a json with the format: ```keyword: relevant_information```.
-        Use the examples as a guide: {examples}
+        Use the example input and output as a guide: {example_input} and {example_output}
     """
 
     messages = [
