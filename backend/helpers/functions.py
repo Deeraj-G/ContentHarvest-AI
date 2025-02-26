@@ -55,7 +55,7 @@ def scrape_url(url: str) -> str:
                 "text": tag.get_text(strip=True),  # Get cleaned text content
                 "id": tag.get("id", ""),  # Get id if exists (useful for anchor links)
             }
-            
+
             # If there's a link inside the heading, capture it
             link = tag.find("a")
             if link:
@@ -114,23 +114,18 @@ def relevant_information(scrape_result: dict) -> dict:
             "content": f"Web scraping failed: {scrape_result['error']}",
             "metadata": None,
         }
-    
-    example_input = [
-        {
-            "level": "h1",
-            "text": 'Example Domain',
-            "id": ''
-        }
-    ]
 
-    example_output = {"information": {
+    example_input = [{"level": "h1", "text": "Example Domain", "id": ""}]
+
+    example_output = {
+        "information": {
             "headings": {
                 "Artificial Intelligence": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems.",
-                "Knowledge representation": "AI reasoning evolved from step-by-step logic to probabilistic methods, but scalability issues and the reliance on human intuition make efficient reasoning an unsolved challenge."
+                "Knowledge representation": "AI reasoning evolved from step-by-step logic to probabilistic methods, but scalability issues and the reliance on human intuition make efficient reasoning an unsolved challenge.",
             },
             "images": {
                 "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png": "AI Icon"
-            }
+            },
         }
     }
 
@@ -165,7 +160,7 @@ def relevant_information(scrape_result: dict) -> dict:
         return {
             "success": True,
             "content": info_content,
-            "metadata": scrape_result["metadata"]
+            "metadata": scrape_result["metadata"],
         }
     except Exception as e:
         return {
