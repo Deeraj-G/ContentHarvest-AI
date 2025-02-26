@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -42,42 +43,34 @@ def scrape_url(url: str) -> str:
     try:
         response = requests.get(url, timeout=10)  # 10 second timeout
         soup = BeautifulSoup(response.text, "html.parser")
-        # Clean the text and limit length
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
 
-        links = []
+        headings = []
 
-        # Find all links within the url with href or src
-        for tag in soup.find_all(["a", "link"]):
-            link_info = {}
-            href = tag.get("href")
-            src = tag.get("src")
+        # Find all headings within the url
+        for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
+            heading_info = {
+                "level": tag.name,  # Get heading level (1-6)
+                "text": tag.get_text(strip=True),  # Get cleaned text content
+                "id": tag.get("id", ""),  # Get id if exists (useful for anchor links)
+            }
 
-            if href:
-                link_info["url"] = href
-                link_info["text"] = tag.text
-            elif src:
-                link_info["url"] = src
-                link_info["text"] = tag.text
+            # If there's a link inside the heading, capture it
+            link = tag.find("a")
+            if link:
+                heading_info["link"] = link.get("href", "")
 
-            if link_info:
-                common = ["title", "rel"]
-                for attr in common:
-                    value = tag.get(attr)
-                    if value:
-                        link_info[attr] = value
-
-                links.append(link_info)
+            headings.append(heading_info)
 
         result = {
             "success": True,
             "original_url": url,
             "all_text": all_text,
-            "links": links,
+            "headings": headings,
             "metadata": {
                 "text_length": len(all_text),
-                "links_count": len(links),
+                "headings_count": len(headings),
                 "truncated": len(all_text) >= 4000,
             },
             "error": None,
@@ -88,7 +81,7 @@ def scrape_url(url: str) -> str:
             "success": False,
             "original_url": url,
             "all_text": None,
-            "links": None,
+            "headings": None,
             "metadata": None,
             "error": str(e),
         }
@@ -97,7 +90,7 @@ def scrape_url(url: str) -> str:
 # Query to LLM to identify the relevant information based on the text
 def relevant_information(scrape_result: dict) -> dict:
     """
-    This function identifies the keywords in the text and returns the information associated with each keyword.
+    This function identifies relevant information from the text.
 
     Args:
         scrape_result (dict): The output from scrape_url containing text, links, and metadata
@@ -105,7 +98,7 @@ def relevant_information(scrape_result: dict) -> dict:
     Returns:
         dict: {
             "success": bool,
-            "keywords": dict | None,  # Keyword information if successful
+            "content": dict | None,  # Information if successful
             "error": str | None,
             "metadata": {
                 "source_length": int,
@@ -114,41 +107,38 @@ def relevant_information(scrape_result: dict) -> dict:
             }
         }
     """
-
     # First check if the web scraping was successful
     if not scrape_result["success"]:
         return {
             "success": False,
-            "keywords": None,
-            "error": f"Web scraping failed: {scrape_result['error']}",
+            "content": f"Web scraping failed: {scrape_result['error']}",
             "metadata": None,
         }
 
-    examples = [
-        {
-            "History": "The history of the company is that it started in 1990 and is a software company.",
-            "Components": "The components of the product are HTML, CSS, and JavaScript built on Monolithic architecture.",
-            "Features": "The features of the product are that it is lightweight, fast, and scalable.",
-        },
-        {
-            "Images": [
-                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png/200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_icon.png",
-                "https://en.wikipedia.org/wiki/File:General_Formal_Ontology.svg",
-            ],
-            "Links": [
-                "https://en.wikipedia.org/wiki/Knowledge_engineering",
-                "https://en.wikipedia.org/wiki/Markov_decision_process",
-            ],
-        },
-    ]
+    example_input = [{"level": "h1", "text": "Example Domain", "id": ""}]
+
+    example_output = {
+        "information": {
+            "headings": {
+                "Artificial Intelligence": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems.",
+                "Knowledge representation": "AI reasoning evolved from step-by-step logic to probabilistic methods, but scalability issues and the reliance on human intuition make efficient reasoning an unsolved challenge.",
+            },
+            "images": {
+                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png": "AI Icon"
+            },
+        }
+    }
 
     system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
 
     user_prompt = f"""
-        Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
-        The page contains {len(scrape_result["links"])} links. Here are some relevant links: {scrape_result["links"][:10]}
-        Return the information in a json with the format: ```keyword: relevant_information```.
-        Use the examples as a guide: {examples}
+        Identify important information (called `information`) from the following text: ```{scrape_result["all_text"][:4000]}```
+        
+        The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: ```{scrape_result["headings"][:10]}```
+        
+        Use the example input as a guide: ```{example_input}```
+        
+        Return the information in a json with the output format: ```{example_output}```
     """
 
     messages = [
@@ -161,26 +151,20 @@ def relevant_information(scrape_result: dict) -> dict:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            timeout=30,  # 30 second timeout for AI response
+            timeout=30,
         )
 
         response = response.model_dump()
-        keywords_content = response["choices"][0]["message"]["content"]
+        info_content = response["choices"][0]["message"]["content"]
 
         return {
             "success": True,
-            "keywords": keywords_content,
-            "error": None,
-            "metadata": {
-                "source_length": scrape_result["metadata"]["text_length"],
-                "source_truncated": scrape_result["metadata"]["truncated"],
-                "links_count": scrape_result["metadata"]["links_count"],
-            },
+            "content": info_content,
+            "metadata": scrape_result["metadata"],
         }
     except Exception as e:
         return {
             "success": False,
-            "keywords": None,
-            "error": f"Error during keyword identification: {e}",
+            "content": f"Error during info identification: {e}",
             "metadata": scrape_result["metadata"],
         }
