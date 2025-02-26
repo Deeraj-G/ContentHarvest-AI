@@ -9,7 +9,6 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
-from loguru import logger
 
 
 load_dotenv()
@@ -41,13 +40,11 @@ def scrape_url(url: str) -> str:
             "error": str | None
         }
     """
-    logger.info(f"Starting to scrape URL: {url}")
     try:
         response = requests.get(url, timeout=10)  # 10 second timeout
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
-        logger.debug(f"Extracted text length: {len(all_text)}")
 
         headings = []
 
@@ -65,9 +62,6 @@ def scrape_url(url: str) -> str:
                 heading_info["link"] = link.get("href", "")
 
             headings.append(heading_info)
-        
-        logger.debug(f"Found {len(headings)} headings")
-        logger.debug(f"Headings: {headings}")
 
         result = {
             "success": True,
@@ -81,10 +75,8 @@ def scrape_url(url: str) -> str:
             },
             "error": None,
         }
-        logger.info(f"Successfully scraped URL: {url}")
         return result
     except Exception as e:
-        logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
             "success": False,
             "original_url": url,
@@ -115,11 +107,8 @@ def relevant_information(scrape_result: dict) -> dict:
             }
         }
     """
-    logger.info("Starting information identification")
-    
     # First check if the web scraping was successful
     if not scrape_result["success"]:
-        logger.error(f"Cannot process information - web scraping failed: {scrape_result}")
         return {
             "success": False,
             "content": f"Web scraping failed: {scrape_result['error']}",
@@ -145,8 +134,6 @@ def relevant_information(scrape_result: dict) -> dict:
         }
     }
 
-    logger.debug(f"Processing text of length {len(scrape_result['all_text'])} with {len(scrape_result['headings'])} headings")
-
     system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
 
     user_prompt = f"""
@@ -166,7 +153,6 @@ def relevant_information(scrape_result: dict) -> dict:
 
     # Call the LLM
     try:
-        logger.debug("Sending request to OpenAI")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -175,7 +161,6 @@ def relevant_information(scrape_result: dict) -> dict:
 
         response = response.model_dump()
         info_content = response["choices"][0]["message"]["content"]
-        logger.info(f"Successfully received and processed OpenAI response: {info_content}")
 
         return {
             "success": True,
@@ -183,7 +168,6 @@ def relevant_information(scrape_result: dict) -> dict:
             "metadata": scrape_result["metadata"]
         }
     except Exception as e:
-        logger.error(f"Error during OpenAI API call: {str(e)}")
         return {
             "success": False,
             "content": f"Error during info identification: {e}",
