@@ -9,6 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+from loguru import logger
+
 
 load_dotenv()
 
@@ -39,19 +41,20 @@ def scrape_url(url: str) -> str:
             "error": str | None
         }
     """
+    logger.info(f"Starting to scrape URL: {url}")
     try:
         response = requests.get(url, timeout=10)  # 10 second timeout
         soup = BeautifulSoup(response.text, "html.parser")
-        # Clean the text and limit length
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
+        logger.debug(f"Extracted text length: {len(all_text)}")
 
         headings = []
 
         # Find all headings within the url
         for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
             heading_info = {
-                "level": int(tag.name[1]),  # Get heading level (1-6)
+                "level": tag.name,  # Get heading level (1-6)
                 "text": tag.get_text(strip=True),  # Get cleaned text content
                 "id": tag.get("id", ""),  # Get id if exists (useful for anchor links)
             }
@@ -62,6 +65,9 @@ def scrape_url(url: str) -> str:
                 heading_info["link"] = link.get("href", "")
 
             headings.append(heading_info)
+        
+        logger.debug(f"Found {len(headings)} headings")
+        logger.debug(f"Headings: {headings}")
 
         result = {
             "success": True,
@@ -75,8 +81,10 @@ def scrape_url(url: str) -> str:
             },
             "error": None,
         }
+        logger.info(f"Successfully scraped URL: {url}")
         return result
     except Exception as e:
+        logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
             "success": False,
             "original_url": url,
@@ -90,7 +98,7 @@ def scrape_url(url: str) -> str:
 # Query to LLM to identify the relevant information based on the text
 def relevant_information(scrape_result: dict) -> dict:
     """
-    This function identifies the keywords in the text and returns the information associated with each keyword.
+    This function identifies relevant information from the text.
 
     Args:
         scrape_result (dict): The output from scrape_url containing text, links, and metadata
@@ -98,7 +106,7 @@ def relevant_information(scrape_result: dict) -> dict:
     Returns:
         dict: {
             "success": bool,
-            "keywords": dict | None,  # Keyword information if successful
+            "content": dict | None,  # Information if successful
             "error": str | None,
             "metadata": {
                 "source_length": int,
@@ -107,46 +115,48 @@ def relevant_information(scrape_result: dict) -> dict:
             }
         }
     """
-
+    logger.info("Starting information identification")
+    
     # First check if the web scraping was successful
     if not scrape_result["success"]:
+        logger.error(f"Cannot process information - web scraping failed: {scrape_result}")
         return {
             "success": False,
-            "keywords": None,
-            "error": f"Web scraping failed: {scrape_result['error']}",
+            "content": f"Web scraping failed: {scrape_result['error']}",
             "metadata": None,
         }
-
+    
     example_input = [
         {
-            "url": "https://en.wikipedia.org/wiki/Knowledge_engineering",
-            "text": "Knowledge engineering",
-            "title": "Learn more about knowledge engineering"
-        },
-        {
-            "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png",
-            "text": "AI Icon",
-            "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png"
+            "level": "h1",
+            "text": 'Example Domain',
+            "id": ''
         }
     ]
 
-    example_output = [
-        {
-            "content": {
-                "Content Analysis": "The content appears to focus on artificial intelligence and knowledge engineering concepts. The presence of DALL-E 3 imagery suggests a focus on generative AI technologies.",
-                "Key Topics": "The main topics covered include knowledge engineering, Markov decision processes, and formal ontology structures, indicating this is likely technical or academic content.",
-                "Visual Elements": "The page contains AI-related imagery, including a DALL-E 3 icon and a diagram showing General Formal Ontology structures.",
+    example_output = {"information": {
+            "headings": {
+                "Artificial Intelligence": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems.",
+                "Knowledge representation": "AI reasoning evolved from step-by-step logic to probabilistic methods, but scalability issues and the reliance on human intuition make efficient reasoning an unsolved challenge."
             },
+            "images": {
+                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png": "AI Icon"
+            }
         }
-    ]
+    }
+
+    logger.debug(f"Processing text of length {len(scrape_result['all_text'])} with {len(scrape_result['headings'])} headings")
 
     system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
 
     user_prompt = f"""
-        Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
-        The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: {scrape_result["headings"][:10]}
-        Return the information in a json with the format: ```keyword: relevant_information```.
-        Use the example input and output as a guide: ```{example_input}``` and ```{example_output}```
+        Identify important information (called `information`) from the following text: ```{scrape_result["all_text"][:4000]}```
+        
+        The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: ```{scrape_result["headings"][:10]}```
+        
+        Use the example input as a guide: ```{example_input}```
+        
+        Return the information in a json with the output format: ```{example_output}```
     """
 
     messages = [
@@ -156,29 +166,26 @@ def relevant_information(scrape_result: dict) -> dict:
 
     # Call the LLM
     try:
+        logger.debug("Sending request to OpenAI")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            timeout=30,  # 30 second timeout for AI response
+            timeout=30,
         )
 
         response = response.model_dump()
-        keywords_content = response["choices"][0]["message"]["content"]
+        info_content = response["choices"][0]["message"]["content"]
+        logger.info(f"Successfully received and processed OpenAI response: {info_content}")
 
         return {
             "success": True,
-            "keywords": keywords_content,
-            "error": None,
-            "metadata": {
-                "source_length": scrape_result["metadata"]["text_length"],
-                "source_truncated": scrape_result["metadata"]["truncated"],
-                "headings_count": scrape_result["metadata"]["headings_count"],
-            },
+            "content": info_content,
+            "metadata": scrape_result["metadata"]
         }
     except Exception as e:
+        logger.error(f"Error during OpenAI API call: {str(e)}")
         return {
             "success": False,
-            "keywords": None,
-            "error": f"Error during keyword identification: {e}",
+            "content": f"Error during info identification: {e}",
             "metadata": scrape_result["metadata"],
         }
