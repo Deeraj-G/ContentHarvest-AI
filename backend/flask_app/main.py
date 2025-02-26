@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app)
 
 
-@app.route("/web_scraper/", methods=["GET", "POST"])
+@app.post("/web_scraper/")
 def index():
     """
     This function handles the web scraper.
