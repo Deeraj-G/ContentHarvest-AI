@@ -146,7 +146,7 @@ def relevant_information(scrape_result: dict) -> dict:
         Identify important information (called `keywords`) from the following text: ```{scrape_result["all_text"][:4000]}```.
         The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: {scrape_result["headings"][:10]}
         Return the information in a json with the format: ```keyword: relevant_information```.
-        Use the example input and output as a guide: {example_input} and {example_output}
+        Use the example input and output as a guide: ```{example_input}``` and ```{example_output}```
     """
 
     messages = [
