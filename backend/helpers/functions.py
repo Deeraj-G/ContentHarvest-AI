@@ -90,9 +90,24 @@ def scrape_url(url: str) -> dict:
             "metadata": None,
             "error": str(e)
         }
+    
+# Construct a vector payload
+def construct_vector_payload(information: dict, url: str, tenant_id: str=None) -> dict:
+    """
+    Constructs the vector payload for the information
+    """
+    return {
+        "vector": [1.0] * 1536,  # Placeholder vector
+        "payload": {
+            "url": url,
+            "tenant_id": tenant_id,
+            "information": information,
+            "timestamp": datetime.now().isoformat()
+        }
+    }
 
-
-def store_information_in_qdrant(information: dict, url: str, tenant_id: str=None) -> dict:
+# Store the list of vector payloads into Qdrant
+def store_information_in_qdrant(vector_payloads: list, tenant_id: str=None) -> dict:
     """
     Store the processed information in Qdrant
 
@@ -104,22 +119,11 @@ def store_information_in_qdrant(information: dict, url: str, tenant_id: str=None
         }
     """
     try:
-        logger.debug(f"Preparing to store information from {url} in Qdrant")
-        qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
-        
-        vector_payload = [{
-            "vector": [1.0] * 1536,  # Placeholder vector
-            "payload": {
-                "url": url,
-                "tenant_id": tenant_id,
-                "information": information,
-                "timestamp": datetime.now().isoformat()
-            }
-        }]
+        logger.debug("Preparing to store information in Qdrant")
+        qdrant_client = QdrantVectorStore(tenant_id=tenant_id, collection_name="web_content")
         
         info = qdrant_client.insert_data_to_qdrant(
-            collection_name="web_content",
-            vector_payload=vector_payload
+            vector_payloads=vector_payloads
         )
         logger.info(f"Successfully stored information in Qdrant: {info}")
         return {
@@ -155,7 +159,14 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
         }
     """
     logger.info("Starting information identification")
+
+    # Initialize the vector payloads
+    vector_payloads = []
     
+    # Add the scrape result to the vector payload
+    vector_payloads.append(construct_vector_payload(scrape_result, scrape_result["original_url"], tenant_id))
+
+    # If the web scraping failed, return the error
     if not scrape_result["success"]:
         logger.error(f"Cannot process information - web scraping failed: {scrape_result['error']}")
         return {
@@ -210,11 +221,12 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
         information_content = response["choices"][0]["message"]["content"]
         logger.info("Successfully received and processed OpenAI response")
 
+        # Add the LLM response to the vector payload
+        vector_payloads.append(construct_vector_payload(information_content, scrape_result["original_url"], tenant_id))
+
         # Store the results in Qdrant
         storage_success = store_information_in_qdrant(
-            information=information_content,
-            url=scrape_result["original_url"],
-            tenant_id=tenant_id
+            vector_payloads=vector_payloads
         )
 
         return {
@@ -230,10 +242,15 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
         }
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
+
+        storage_success = store_information_in_qdrant(
+            vector_payloads=vector_payloads
+        )
+
         return {
             "success": False,
             "information": None,
-            "storage_success": False,
+            "storage_success": storage_success["success"],
             "metadata": scrape_result["metadata"],
             "error": f"Error during information identification: {str(e)}"
         }
