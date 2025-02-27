@@ -47,8 +47,7 @@ class QdrantVectorStore:
         """
         if self.client is None:
             try:
-                qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-                self.client = qdrant_client
+                self.client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
             except Exception as e:
                 raise e
 
