@@ -21,16 +21,18 @@ class QdrantVectorStore:
     Handles connection, data insertion, and search operations with a Qdrant database
     """
 
-    def __init__(self, tenant_id, *args, **kwargs):
+    def __init__(self, tenant_id, collection_name, *args, **kwargs):
         """
         Initialize the vector store
 
         Args:
             tenant_id: Identifier for the organization/tenant
+            collection_name: Name of the collection to insert data into
             *args, **kwargs: Additional arguments passed to parent class
         """
         super().__init__(*args, **kwargs)
         self.tenant_id = tenant_id
+        self.collection_name = collection_name
         self.client = self.connect()
 
     def connect(self):
@@ -52,7 +54,7 @@ class QdrantVectorStore:
 
         return self.client
 
-    def insert_data_to_qdrant(self, collection_name: str, vector_payload: list):
+    def insert_data_to_qdrant(self, vector_payloads: list):
         """
         Insert vector embeddings and their associated payloads into Qdrant
 
@@ -64,16 +66,20 @@ class QdrantVectorStore:
         Returns:
             info: Response from Qdrant about the insertion operation
         """
+        session_id = str(uuid.uuid4())  # Create one session_id for the group
         info = self.client.upsert(
-            collection_name=collection_name,
+            collection_name=self.collection_name,
             wait=True,  # Wait for operation to complete
             points=[
                 PointStruct(
-                    id=str(uuid.uuid4()),  # Generate unique ID for each point
-                    vector=vector_set.get("vector"),  # The vector embedding
-                    payload=vector_set.get("payload"),  # Associated metadata/payload
+                    id=str(uuid.uuid4()),  # Unique ID for each point
+                    vector=vector_set.get("vector"),
+                    payload={
+                        **vector_set.get("payload", {}),  # Spread existing payload
+                        "session_id": session_id  # Add session_id to payload
+                    }
                 )
-                for vector_set in vector_payload
+                for vector_set in vector_payloads
             ],
         )
 
