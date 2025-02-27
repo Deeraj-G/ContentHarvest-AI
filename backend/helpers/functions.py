@@ -4,11 +4,15 @@ This file contains the functions for the web scraper.
 
 import os
 import re
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+from loguru import logger
+
+from rag.qdrant import QdrantVectorStore
 
 
 load_dotenv()
@@ -19,7 +23,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Scrape the URL and return the text
 # Scrape based on bolded words (these are the most important words)
-def scrape_url(url: str) -> str:
+def scrape_url(url: str) -> dict:
     """
     Scrapes a URL and returns the content with metadata.
 
@@ -29,22 +33,22 @@ def scrape_url(url: str) -> str:
     Returns:
         dict: {
             "success": bool,
-            "url": str,
-            "all_text": str,
-            "links": list[dict],
-            "metadata": {
-                "text_length": int,
-                "links_count": int,
-                "truncated": bool
-            },
+            "original_url": str,
+            "all_text": str | None,
+            "headings": list | None,
+            "metadata": dict | None,
             "error": str | None
         }
     """
+    logger.info(f"Starting to scrape URL: {url}")
     try:
-        response = requests.get(url, timeout=10)  # 10 second timeout
+        response = requests.get(url, timeout=10)
+        logger.debug(f"Response status code: {response.status_code}")
+        
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
-        all_text = re.sub(r"\s+", " ", all_text)  # Remove extra whitespace
+        all_text = re.sub(r"\s+", " ", all_text)
+        logger.debug(f"Extracted text length: {len(all_text)}")
 
         headings = []
 
@@ -77,42 +81,89 @@ def scrape_url(url: str) -> str:
         }
         return result
     except Exception as e:
+        logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
             "success": False,
             "original_url": url,
             "all_text": None,
             "headings": None,
             "metadata": None,
-            "error": str(e),
+            "error": str(e)
         }
 
 
-# Query to LLM to identify the relevant information based on the text
-def relevant_information(scrape_result: dict) -> dict:
+def store_information_in_qdrant(information: dict, url: str, tenant_id: str=None) -> dict:
     """
-    This function identifies relevant information from the text.
-
-    Args:
-        scrape_result (dict): The output from scrape_url containing text, links, and metadata
+    Store the processed information in Qdrant
 
     Returns:
         dict: {
             "success": bool,
-            "content": dict | None,  # Information if successful
-            "error": str | None,
-            "metadata": {
-                "source_length": int,
-                "source_truncated": bool,
-                "links_count": int
-            }
+            "info": dict | None,
+            "error": str | None
         }
     """
-    # First check if the web scraping was successful
-    if not scrape_result["success"]:
+    try:
+        logger.debug(f"Preparing to store information from {url} in Qdrant")
+        qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
+        
+        vector_payload = [{
+            "vector": [1.0] * 1536,  # Placeholder vector
+            "payload": {
+                "url": url,
+                "tenant_id": tenant_id,
+                "information": information,
+                "timestamp": datetime.now().isoformat()
+            }
+        }]
+        
+        info = qdrant_client.insert_data_to_qdrant(
+            collection_name="web_content",
+            vector_payload=vector_payload
+        )
+        logger.info(f"Successfully stored information in Qdrant: {info}")
+        return {
+            "success": True,
+            "info": info,
+            "error": None
+        }
+    except Exception as e:
+        logger.error(f"Failed to store information in Qdrant: {str(e)}")
         return {
             "success": False,
-            "content": f"Web scraping failed: {scrape_result['error']}",
+            "info": None,
+            "error": str(e)
+        }
+
+
+# Query to LLM to identify the relevant information based on the text
+def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
+    """
+    This function identifies relevant information from the text and stores it in Qdrant before querying the LLM.
+
+    Args:
+        scrape_result (dict): The output from scrape_url containing text, links, and metadata
+        tenant_id (str): The tenant ID for Qdrant
+
+    Returns:
+        dict: {
+            "success": bool,
+            "information": dict | None,
+            "storage_success": bool,
+            "metadata": dict | None,
+            "error": str | None
+        }
+    """
+    logger.info("Starting information identification")
+    
+    if not scrape_result["success"]:
+        logger.error(f"Cannot process information - web scraping failed: {scrape_result['error']}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
             "metadata": None,
+            "error": f"Web scraping failed: {scrape_result['error']}"
         }
 
     example_input = [{"level": "h1", "text": "Example Domain", "id": ""}]
@@ -148,6 +199,7 @@ def relevant_information(scrape_result: dict) -> dict:
 
     # Call the LLM
     try:
+        logger.debug("Sending request to OpenAI")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -155,16 +207,33 @@ def relevant_information(scrape_result: dict) -> dict:
         )
 
         response = response.model_dump()
-        info_content = response["choices"][0]["message"]["content"]
+        information_content = response["choices"][0]["message"]["content"]
+        logger.info("Successfully received and processed OpenAI response")
+
+        # Store the results in Qdrant
+        storage_success = store_information_in_qdrant(
+            information=information_content,
+            url=scrape_result["original_url"],
+            tenant_id=tenant_id
+        )
 
         return {
             "success": True,
-            "content": info_content,
-            "metadata": scrape_result["metadata"],
+            "information": information_content,
+            "storage_success": storage_success["success"],
+            "metadata": {
+                "source_length": scrape_result["metadata"]["text_length"],
+                "source_truncated": scrape_result["metadata"]["truncated"],
+                "headings_count": scrape_result["metadata"]["headings_count"],
+            },
+            "error": None
         }
     except Exception as e:
+        logger.error(f"Error during OpenAI API call: {str(e)}")
         return {
             "success": False,
-            "content": f"Error during info identification: {e}",
+            "information": None,
+            "storage_success": False,
             "metadata": scrape_result["metadata"],
+            "error": f"Error during information identification: {str(e)}"
         }
