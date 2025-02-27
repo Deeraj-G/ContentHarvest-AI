@@ -11,8 +11,9 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from loguru import logger
-
+from uuid import UUID
 from rag.qdrant import QdrantVectorStore
+from backend.models.models import ContentProcessor
 
 
 load_dotenv()
@@ -141,7 +142,7 @@ def store_information_in_qdrant(vector_payloads: list, tenant_id: str=None) -> d
 
 
 # Query to LLM to identify the relevant information based on the text
-def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
+def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
     """
     This function identifies relevant information from the text and stores it in Qdrant before querying the LLM.
 
@@ -159,12 +160,15 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
         }
     """
     logger.info("Starting information identification")
-
-    # Initialize the vector payloads
-    vector_payloads = []
     
-    # Add the scrape result to the vector payload
-    vector_payloads.append(construct_vector_payload(scrape_result, scrape_result["original_url"], tenant_id))
+    processor = ContentProcessor(tenant_id=tenant_id)
+
+    # Add the scrape result
+    processor.add_payload(
+        content=scrape_result,
+        content_type="scrape_result",
+        url=scrape_result["original_url"]
+    )
 
     # If the web scraping failed, return the error
     if not scrape_result["success"]:
@@ -177,30 +181,35 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
             "error": f"Web scraping failed: {scrape_result['error']}"
         }
 
-    example_input = [{"level": "h1", "text": "Example Domain", "id": ""}]
+    example_input = [{"level": "h1", "text": "Artificial Intelligence", "id": ""}]
 
     example_output = {
         "information": {
             "headings": {
                 "Artificial Intelligence": "Artificial intelligence (AI), in its broadest sense, is intelligence exhibited by machines, particularly computer systems.",
                 "Knowledge representation": "AI reasoning evolved from step-by-step logic to probabilistic methods, but scalability issues and the reliance on human intuition make efficient reasoning an unsolved challenge.",
-            },
-            "images": {
-                "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Dall-e_3.png": "AI Icon"
-            },
+            }
         }
     }
 
-    system_prompt = "You are a helpful assistant that identifies the information associated with important `keywords`."
+    system_prompt = """
+        You are an expert at identifying the most important information from given text. 
+    
+        You are also given a list of headings. 
+    
+        Your job is to identify and summarize the information associated with each heading.
+    """
 
     user_prompt = f"""
-        Identify important information (called `information`) from the following text: ```{scrape_result["all_text"][:4000]}```
+        Identify important information belonging to each heading from the following text: ```{scrape_result["all_text"][:4000]}```
         
-        The page contains {len(scrape_result["headings"])} headings. Here are some relevant headings: ```{scrape_result["headings"][:10]}```
+        The page contains {len(scrape_result["headings"])} headings. Here are the first 10 headings: ```{scrape_result["headings"][:10]}```
         
         Use the example input as a guide: ```{example_input}```
         
         Return the information in a json with the output format: ```{example_output}```
+
+        Use your knowledge and judgement to identify the most important information for each heading.
     """
 
     messages = [
@@ -221,18 +230,22 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
         information_content = response["choices"][0]["message"]["content"]
         logger.info("Successfully received and processed OpenAI response")
 
-        # Add the LLM response to the vector payload
-        vector_payloads.append(construct_vector_payload(information_content, scrape_result["original_url"], tenant_id))
+        # Add the LLM result
+        processor.add_payload(
+            content=information_content,
+            content_type="llm_response",
+            url=scrape_result["original_url"]
+        )
 
-        # Store the results in Qdrant
-        storage_success = store_information_in_qdrant(
-            vector_payloads=vector_payloads
+        storage_result = store_information_in_qdrant(
+            vector_payloads=processor.get_payloads(),
+            tenant_id=tenant_id
         )
 
         return {
             "success": True,
             "information": information_content,
-            "storage_success": storage_success["success"],
+            "storage_success": storage_result["success"],
             "metadata": {
                 "source_length": scrape_result["metadata"]["text_length"],
                 "source_truncated": scrape_result["metadata"]["truncated"],
@@ -243,14 +256,15 @@ def relevant_information(scrape_result: dict, tenant_id: str = None) -> dict:
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
 
-        storage_success = store_information_in_qdrant(
-            vector_payloads=vector_payloads
+        storage_result = store_information_in_qdrant(
+            vector_payloads=processor.get_payloads(),
+            tenant_id=tenant_id
         )
 
         return {
             "success": False,
             "information": None,
-            "storage_success": storage_success["success"],
+            "storage_success": storage_result["success"],
             "metadata": scrape_result["metadata"],
             "error": f"Error during information identification: {str(e)}"
         }
