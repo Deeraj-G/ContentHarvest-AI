@@ -8,6 +8,7 @@ import uuid
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient, models
 from qdrant_client.models import PointStruct
+from loguru import logger
 
 load_dotenv()
 
@@ -21,19 +22,17 @@ class QdrantVectorStore:
     Handles connection, data insertion, and search operations with a Qdrant database
     """
 
-    def __init__(self, tenant_id, collection_name, *args, **kwargs):
+    def __init__(self, tenant_id: str, *args, **kwargs):
         """
         Initialize the vector store
 
         Args:
             tenant_id: Identifier for the organization/tenant
-            collection_name: Name of the collection to insert data into
             *args, **kwargs: Additional arguments passed to parent class
         """
         super().__init__(*args, **kwargs)
         self.tenant_id = tenant_id
-        self.collection_name = collection_name
-        self.client = self.connect()
+        self.client = self.connect()  # Now connect and assign the client
 
     def connect(self):
         """
@@ -45,13 +44,11 @@ class QdrantVectorStore:
         Raises:
             Exception: If connection fails
         """
-        if self.client is None:
-            try:
-                self.client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-            except Exception as e:
-                raise e
-
-        return self.client
+        try:
+            qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+            return qdrant_client
+        except Exception as e:
+            raise Exception(f"Failed to connect to Qdrant: {str(e)}")
 
     def insert_data_to_qdrant(self, vector_payloads: list):
         """
@@ -66,8 +63,9 @@ class QdrantVectorStore:
             info: Response from Qdrant about the insertion operation
         """
         session_id = str(uuid.uuid4())  # Create one session_id for the group
-        info = self.client.upsert(
-            collection_name=self.collection_name,
+        try:
+            info = self.client.upsert(
+            collection_name='web_content',
             wait=True,  # Wait for operation to complete
             points=[
                 PointStruct(
@@ -78,11 +76,14 @@ class QdrantVectorStore:
                         "session_id": session_id  # Add session_id to payload
                     }
                 )
-                for vector_set in vector_payloads
-            ],
-        )
+                    for vector_set in vector_payloads
+                ],
+            )
 
-        return info
+            return info
+        except Exception as e:
+            logger.error(f"Error inserting data to Qdrant: {e}")
+            raise e
 
     def search_data_from_qdrant(
         self, collection_name: str, query: str, tenant_id: str = None, limit: int = 5
@@ -113,7 +114,7 @@ class QdrantVectorStore:
         # Perform the search using Qdrant client
         return self.client.search(
             collection_name=collection_name,
-            query_text=query,
+            query_vector=query,
             tenant_id=tenant_id,
             limit=limit,
         )
