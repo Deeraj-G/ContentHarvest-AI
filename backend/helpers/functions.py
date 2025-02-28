@@ -58,7 +58,6 @@ def scrape_url(url: str) -> dict:
             heading_info = {
                 "level": tag.name,  # Get heading level (1-6)
                 "text": tag.get_text(strip=True),  # Get cleaned text content
-                "id": tag.get("id", ""),  # Get id if exists (useful for anchor links)
             }
 
             # If there's a link inside the heading, capture it
