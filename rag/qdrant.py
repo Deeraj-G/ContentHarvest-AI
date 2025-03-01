@@ -50,7 +50,7 @@ class QdrantVectorStore:
         except Exception as e:
             raise Exception(f"Failed to connect to Qdrant: {str(e)}")
 
-    def insert_data_to_qdrant(self, vector_payloads: list):
+    def insert_data_to_qdrant(self, vector_payloads: list, collection_name: str):
         """
         Insert vector embeddings and their associated payloads into Qdrant
 
@@ -65,10 +65,10 @@ class QdrantVectorStore:
         session_id = str(uuid.uuid4())  # Create one session_id for the group
         try:
             info = self.client.upsert(
-            collection_name='web_content',
-            wait=True,  # Wait for operation to complete
-            points=[
-                PointStruct(
+                collection_name=collection_name,
+                wait=True,  # Wait for operation to complete
+                points=[
+                    PointStruct(
                     id=str(uuid.uuid4()),  # Unique ID for each point
                     vector=vector_set.get("vector"),
                     payload={
