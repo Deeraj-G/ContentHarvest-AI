@@ -4,7 +4,6 @@ This file contains the functions for the web scraper.
 
 import os
 import re
-from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -69,14 +68,8 @@ def scrape_url(url: str) -> dict:
 
         result = {
             "success": True,
+            "information": {"all_text": all_text, "headings": headings},
             "original_url": url,
-            "all_text": all_text,
-            "headings": headings,
-            "metadata": {
-                "text_length": len(all_text),
-                "headings_count": len(headings),
-                "truncated": len(all_text) >= 4000,
-            },
             "error": None,
         }
         return result
@@ -84,30 +77,14 @@ def scrape_url(url: str) -> dict:
         logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
             "success": False,
+            "information": {"all_text": all_text, "headings": headings},
             "original_url": url,
-            "all_text": None,
-            "headings": None,
-            "metadata": None,
             "error": str(e)
         }
-    
-# Construct a vector payload
-def construct_vector_payload(information: dict, url: str, tenant_id: str=None) -> dict:
-    """
-    Constructs the vector payload for the information
-    """
-    return {
-        "vector": [1.0] * 1536,  # Placeholder vector
-        "payload": {
-            "url": url,
-            "tenant_id": tenant_id,
-            "information": information,
-            "timestamp": datetime.now().isoformat()
-        }
-    }
+
 
 # Store the list of vector payloads into Qdrant
-def store_information_in_qdrant(vector_payloads: list, tenant_id: str=None) -> dict:
+def store_information_in_qdrant(vector_payloads: list, collection_name: str, tenant_id: str=None) -> dict:
     """
     Store the processed information in Qdrant
 
@@ -120,10 +97,11 @@ def store_information_in_qdrant(vector_payloads: list, tenant_id: str=None) -> d
     """
     try:
         logger.debug("Preparing to store information in Qdrant")
-        qdrant_client = QdrantVectorStore(tenant_id=tenant_id, collection_name="web_content")
+        qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
         
         info = qdrant_client.insert_data_to_qdrant(
-            vector_payloads=vector_payloads
+            vector_payloads=vector_payloads,
+            collection_name=collection_name
         )
         logger.info(f"Successfully stored information in Qdrant: {info}")
         return {
@@ -154,20 +132,12 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
             "success": bool,
             "information": dict | None,
             "storage_success": bool,
-            "metadata": dict | None,
             "error": str | None
         }
     """
     logger.info("Starting information identification")
     
     processor = ContentProcessor(tenant_id=tenant_id)
-
-    # Add the scrape result
-    processor.add_payload(
-        content=scrape_result,
-        content_type="scrape_result",
-        url=scrape_result["original_url"]
-    )
 
     # If the web scraping failed, return the error
     if not scrape_result["success"]:
@@ -176,7 +146,6 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
             "success": False,
             "information": None,
             "storage_success": False,
-            "metadata": None,
             "error": f"Web scraping failed: {scrape_result['error']}"
         }
 
@@ -225,31 +194,51 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
             timeout=30,
         )
 
-        response = response.model_dump()
-        information_content = response["choices"][0]["message"]["content"]
-        logger.info("Successfully received and processed OpenAI response")
+        llm_response = response.model_dump()
+        logger.info(f"Successfully received and processed OpenAI response: {llm_response}")
+
+        information_content = llm_response["choices"][0]["message"]["content"]
+        logger.info(f"Information content: {information_content}")
+
+        # Clean and parse the LLM response
+        cleaned_content = information_content.replace("```json", "").replace("```", "").strip()
+        # cleaned_content = {
+        #     "information": {
+        #         "headings": {
+        #             "Prehistoric era (before c. 3300 BCE)": "The prehistoric era in India includes the Paleolithic and Neolithic periods.",
+        #             "Bronze Age (c. 3300 – 1800 BCE)": "The Bronze Age in India covers the time period from around 3300 BCE to 1800 BCE, including the Indus Valley Civilization and the Ochre Coloured Pottery culture.",
+        #             "Iron Age (c. 1800 – 200 BCE)": "The Iron Age in India spans from around 1800 BCE to 200 BCE and includes the Vedic period from 1500 BCE to 600 BCE among other developments.",
+        #             "Classical period (c. 200 BCE – 650 CE)": "The classical period in India stretches from approximately 200 BCE to 650 CE, encompassing dynasties such as the Shunga Empire, Satavahana Empire, Gupta Empire, and others.",
+        #             "Early medieval period (c. 650 – 1200)": "The early medieval period in India covers the time period from around 650 CE to 1200 CE, including dynasties like the Chalukya Empire, Rashtrakuta Empire, Pala Empire, and more.",
+        #             "Late medieval period (c. 1200 – 1526)": "The late medieval period in India ranges from approximately 1200 CE to 1526 CE and includes entities like the Delhi Sultanate, Vijayanagara Empire, and the Bhakti movement.",
+        #             "Early modern period (1526–1858)": "The early modern period in India spans from 1526 to 1858 and consists of entities like the Mughal Empire, Maratha Empire, European exploration, and the rule of the East India Company.",
+        #             "Late modern period and contemporary history (1857–1947)": "The late modern period and contemporary history in India covers the time from 1857 to 1947, including significant events like the Rebellion of 1857, British Raj, Indian independence movement, and more.",
+        #             "Independence and partition (1947–present)": "India gained independence in 1947, marking the end of British colonial rule and the beginning of a new era in the country's history."
+        #         }
+        #     }
+        # }
+        logger.info(f"Cleaned content: {cleaned_content}")
 
         # Add the LLM result
         processor.add_payload(
-            content=information_content,
-            content_type="llm_response",
+            content={
+                "cleaned_content": cleaned_content, 
+                "all_text": scrape_result["information"]["all_text"], 
+                "headings": scrape_result["information"]["headings"]
+            },
             url=scrape_result["original_url"]
         )
 
         storage_result = store_information_in_qdrant(
             vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            collection_name="web_content"
         )
 
         return {
             "success": True,
-            "information": information_content,
+            "information": cleaned_content,
             "storage_success": storage_result["success"],
-            "metadata": {
-                "source_length": scrape_result["metadata"]["text_length"],
-                "source_truncated": scrape_result["metadata"]["truncated"],
-                "headings_count": scrape_result["metadata"]["headings_count"],
-            },
             "error": None
         }
     except Exception as e:
@@ -257,13 +246,13 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
 
         storage_result = store_information_in_qdrant(
             vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            collection_name="web_content"
         )
 
         return {
             "success": False,
             "information": None,
             "storage_success": storage_result["success"],
-            "metadata": scrape_result["metadata"],
             "error": f"Error during information identification: {str(e)}"
         }
