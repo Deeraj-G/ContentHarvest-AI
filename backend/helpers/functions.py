@@ -4,18 +4,23 @@ This file contains the functions for the web scraper.
 
 import os
 import re
+from uuid import UUID
 
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from loguru import logger
-from uuid import UUID
 from rag.qdrant import QdrantVectorStore
+
 from backend.models.models import ContentProcessor
+from backend.models.mongodb import MongoDBManager
 
 
 load_dotenv()
+
+MONGODB_URL = os.getenv("MONGODB_URL")
+DATABASE_NAME = os.getenv("DATABASE_NAME")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -86,48 +91,24 @@ def scrape_url(url: str) -> dict:
 
 
 # Query to LLM to identify the relevant information based on the text
-def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
+async def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
     """
-    This function identifies relevant information from the text and stores it in Qdrant before querying the LLM.
-
-    Args:
-        scrape_result (dict): The output from scrape_url containing text, links, and metadata
-        tenant_id (str): The tenant ID for Qdrant
-
-    Returns:
-        dict: {
-            "success": bool,
-            "information": dict | None,
-            "storage_success": bool,
-            "error": str | None
-        }
+    Store content in both MongoDB and Qdrant.
+    MongoDB gets the full content, Qdrant gets the vectors for search.
     """
-
-    if not scrape_result["success"]:
-        logger.error(f"Cannot process information - web scraping failed: {scrape_result['error']}")
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": False,
-            "error": f"Web scraping failed: {scrape_result['error']}"
-        }
+    # Prepare and store vectors in Qdrant
 
     logger.info("Starting information identification")
-    
+
     processor = ContentProcessor(tenant_id=tenant_id)
 
     # If the web scraping failed, return the error
     if not scrape_result["success"]:
         logger.error(f"Cannot process information - web scraping failed: {scrape_result['error']}")
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": False,
-            "error": f"Web scraping failed: {scrape_result['error']}"
-        }
+        return relevant_information_return_message(success=False, information=None, storage_success=False, error=f"Web scraping failed: {scrape_result['error']}")
 
     # Example input and output
-    example_input = [{"level": "h1", "text": "Artificial Intelligence", "id": ""}]
+    example_input = [{"level": "h1", "text": "Artificial Intelligence"}]
 
     example_output = {
         "information": {
@@ -181,12 +162,25 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
         cleaned_content = information_content.replace("```json", "").replace("```", "").strip()
         logger.info(f"Cleaned content: {cleaned_content}")
 
+        # Store full content in MongoDB
+        mongo_result = await MongoDBManager.insert_web_content(
+            url=scrape_result["original_url"],
+            original_text=scrape_result["all_text"],
+            headings=scrape_result["headings"],
+            processed_content={
+                "llm_response": cleaned_content,
+                "metadata": scrape_result["metadata"]
+            },
+            tenant_id=tenant_id
+        )
+
         # Add the LLM result
         processor.add_payload(
             content={
                 "llm_response": cleaned_content, 
                 "all_text": scrape_result["information"]["all_text"], 
-                "headings": scrape_result["information"]["headings"]
+                "headings": scrape_result["information"]["headings"],
+                "mongo_id": str(mongo_result.id)
             },
             url=scrape_result["original_url"]
         )
@@ -197,12 +191,7 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
             collection_name="web_content"
         )
 
-        return {
-            "success": True,
-            "information": cleaned_content,
-            "storage_success": storage_result["success"],
-            "error": None
-        }
+        return relevant_information_return_message(success=True, information=cleaned_content, storage_success=storage_result["success"], error=None)
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
 
@@ -212,12 +201,7 @@ def relevant_information(scrape_result: dict, tenant_id: UUID=None) -> dict:
             collection_name="web_content"
         )
 
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": storage_result["success"],
-            "error": f"Error during information identification: {str(e)}"
-        }
+        return relevant_information_return_message(success=False, information=None, storage_success=storage_result["success"], error=f"Error during information identification: {str(e)}")
 
 
 # Store the list of vector payloads into Qdrant
@@ -253,3 +237,15 @@ def store_information_in_qdrant(vector_payloads: list, collection_name: str, ten
             "info": None,
             "error": str(e)
         }
+    
+
+def relevant_information_return_message(success: bool, information: dict, storage_success: bool, error: str) -> dict:
+    """
+    Return a message with the success, information, storage success, and error.
+    """
+    return {
+        "success": success,
+        "information": information,
+        "storage_success": storage_success,
+        "error": error
+    }
