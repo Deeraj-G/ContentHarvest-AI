@@ -23,7 +23,7 @@ class ContentProcessor(BaseModel):
     tenant_id: Union[UUID, None] = None
     vector_payloads: List[VectorPayload] = []
 
-    def add_payload(self, content: dict, content_type: str, url: str) -> None:
+    def add_payload(self, content: dict, url: str) -> None:
         """
         Add a new payload to the vector_payloads list.
 
@@ -37,9 +37,8 @@ class ContentProcessor(BaseModel):
             payload={
                 "url": url,
                 "tenant_id": self.tenant_id,
-                "content_type": content_type,
                 "content": content,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now().isoformat(),
             }
         )
         self.vector_payloads.append(payload)
