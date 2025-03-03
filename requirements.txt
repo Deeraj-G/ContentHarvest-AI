@@ -1,0 +1,25 @@
+# Web Framework
+fastapi
+
+# Database
+motor
+beanie
+pymongo
+qdrant-client
+
+# AI/ML
+openai
+
+# Web Scraping
+beautifulsoup4
+requests
+
+# Utils
+python-dotenv
+loguru
+pydantic-core
+typing-extensions
+
+# Testing and Development
+pytest
+pytest-asyncio
