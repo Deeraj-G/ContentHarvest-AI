@@ -48,12 +48,12 @@ def scrape_url(url: str) -> dict:
     logger.info(f"Starting to scrape URL: {url}")
     try:
         response = requests.get(url, timeout=10)
-        logger.debug(f"Response status code: {response.status_code}")
+        logger.info(f"Response status code: {response.status_code}")
 
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)
-        logger.debug(f"Extracted text length: {len(all_text)}")
+        logger.info(f"Extracted text length: {len(all_text)}")
 
         headings = []
 
@@ -115,9 +115,9 @@ async def vectorize_and_store_web_content(
         {"role": "user", "content": user_prompt},
     ]
 
-    # Call the LLM
+    # Call LLM
     try:
-        logger.debug("Sending request to OpenAI")
+        logger.info("Sending request to OpenAI...")
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -191,7 +191,7 @@ async def vectorize_and_store_web_content(
             tenant_id=tenant_id,
         )
 
-        logger.info(f"Stored error information in MongoDB: {mongo_result.id}")
+        logger.debug(f"Stored error information in MongoDB: {mongo_result.id}")
 
         # Add the LLM processed result
         processor.add_payload(
@@ -204,7 +204,7 @@ async def vectorize_and_store_web_content(
             url=scrape_result["original_url"],
         )
 
-        logger.info("Successfully added payload to processor")
+        logger.debug("Successfully added payload to processor")
 
         qdrant_storage_result = vectorize_information_to_qdrant(
             vector_payloads=processor.get_payloads(),
@@ -212,7 +212,7 @@ async def vectorize_and_store_web_content(
             collection_name="web_content",
         )
 
-        logger.info("Storing information in Qdrant...")
+        logger.debug("Storing information in Qdrant...")
 
         return {
             "success": False,
@@ -237,7 +237,7 @@ def vectorize_information_to_qdrant(
         }
     """
     try:
-        logger.debug("Preparing to store information in Qdrant...")
+        logger.info("Preparing to store information in Qdrant...")
         qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
 
         info = qdrant_client.insert_data_to_qdrant(
@@ -318,7 +318,7 @@ def get_prompts(scrape_result: dict):
         4. Exclude any additional text or formatting
     """
 
-    logger.debug(f"System Prompt: {system_prompt}")
-    logger.debug(f"User Prompt: {user_prompt}")
+    logger.info(f"System Prompt: {system_prompt}")
+    logger.info(f"User Prompt: {user_prompt}")
 
     return system_prompt, user_prompt
