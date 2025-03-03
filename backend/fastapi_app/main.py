@@ -7,10 +7,11 @@ from contextlib import asynccontextmanager
 from http import HTTPStatus
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
 from backend.helpers.functions import vectorize_and_store_web_content, scrape_url
 from backend.models.init_db import init_mongodb
 from backend.models.mongodb import MongoDBManager
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -56,7 +57,9 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
                 "status": HTTPStatus.BAD_REQUEST,
             }
 
-        process_result = await vectorize_and_store_web_content(scrape_result, tenant_id=tenant_id)
+        process_result = await vectorize_and_store_web_content(
+            scrape_result, tenant_id=tenant_id
+        )
         return {"content": process_result, "status": HTTPStatus.OK}
     except Exception as e:
         return {

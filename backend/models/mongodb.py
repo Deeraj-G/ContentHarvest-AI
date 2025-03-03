@@ -49,6 +49,7 @@ class MongoDBManager:
     """
     Manager class for MongoDB operations.
     """
+
     _client: Optional[AsyncIOMotorClient] = None
 
     @classmethod
@@ -108,4 +109,6 @@ class MongoDBManager:
         Returns:
             List[WebContent]: List of found documents
         """
-        return await WebContent.find(WebContent.url == url, WebContent.tenant_id == tenant_id).to_list()
+        return await WebContent.find(
+            WebContent.url == url, WebContent.tenant_id == tenant_id
+        ).to_list()

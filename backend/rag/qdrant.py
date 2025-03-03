@@ -69,13 +69,13 @@ class QdrantVectorStore:
                 wait=True,  # Wait for operation to complete
                 points=[
                     PointStruct(
-                    id=str(uuid.uuid4()),  # Unique ID for each point
-                    vector=vector_set.get("vector"),
-                    payload={
-                        **vector_set.get("payload", {}),  # Spread existing payload
-                        "session_id": session_id  # Add session_id to payload
-                    }
-                )
+                        id=str(uuid.uuid4()),  # Unique ID for each point
+                        vector=vector_set.get("vector"),
+                        payload={
+                            **vector_set.get("payload", {}),  # Spread existing payload
+                            "session_id": session_id,  # Add session_id to payload
+                        },
+                    )
                     for vector_set in vector_payloads
                 ],
             )

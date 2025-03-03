@@ -25,6 +25,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 TEXT_LIMIT = 4000
 HEADING_LIMIT = 10
 
+
 # Scrape the URL and return the text
 # Scrape based on bolded words (these are the most important words)
 def scrape_url(url: str) -> dict:
@@ -83,7 +84,9 @@ def scrape_url(url: str) -> dict:
 
 
 # Query to LLM to identify the relevant information based on the text
-async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID = None) -> dict:
+async def vectorize_and_store_web_content(
+    scrape_result: dict, tenant_id: UUID = None
+) -> dict:
     """
     Store content in both MongoDB and Qdrant.
     MongoDB gets the full content, Qdrant gets the vectors for search.
@@ -253,7 +256,6 @@ def get_prompts(scrape_result: dict):
     Static system prompt for the LLM
     """
 
-
     example_raw_text = """
     Introduction to Machine Learning
     Machine learning represents a fundamental shift in how computers operate. Instead of following explicit programming instructions, these systems learn patterns from data. This revolutionary approach has transformed various industries and continues to drive innovation in technology. The field combines statistics, computer science, and data analysis to create powerful predictive models.
@@ -272,7 +274,7 @@ def get_prompts(scrape_result: dict):
         {"Introduction to Machine Learning": "h1"},
         {"Supervised Learning Methods": "h2"},
         {"Deep Learning Applications": "h3"},
-        {"Neural Networks and Deep Learning": "h2"}
+        {"Neural Networks and Deep Learning": "h2"},
     ]
 
     example_output = {
@@ -281,7 +283,7 @@ def get_prompts(scrape_result: dict):
                 "Introduction to Machine Learning": "Machine learning represents a fundamental shift in how computers operate, enabling systems to learn patterns from data rather than following explicit programming instructions. This field combines statistics, computer science, and data analysis to create powerful predictive models.",
                 "Supervised Learning Methods": "Supervised learning algorithms learn from labeled datasets where the desired output is known, using techniques like decision trees and support vector machines to identify patterns and make predictions. This approach is widely used for classification tasks like spam detection.",
                 "Deep Learning Applications": "Deep learning has revolutionized multiple sectors, from healthcare (medical image analysis) to autonomous vehicles and natural language processing, enabling sophisticated real-time decision making and analysis.",
-                "Neural Networks and Deep Learning": "Neural networks are mathematical models inspired by the human brain, consisting of multiple layers of interconnected nodes that process information with increasing complexity. These layers progress from detecting simple features to recognizing complex patterns in data."
+                "Neural Networks and Deep Learning": "Neural networks are mathematical models inspired by the human brain, consisting of multiple layers of interconnected nodes that process information with increasing complexity. These layers progress from detecting simple features to recognizing complex patterns in data.",
             }
         }
     }

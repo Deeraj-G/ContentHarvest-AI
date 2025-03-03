@@ -23,5 +23,5 @@ async def init_mongodb(mongodb_url: str, database_name: str):
     # Initialize Beanie with the MongoDB client
     await init_beanie(
         database=client[database_name],
-        document_models=[WebContent]  # Add all document models here
+        document_models=[WebContent],  # Add all document models here
     )
