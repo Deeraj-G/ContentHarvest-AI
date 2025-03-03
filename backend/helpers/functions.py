@@ -109,6 +109,10 @@ async def vectorize_and_store_web_content(
     processor = ContentProcessor(tenant_id=tenant_id)
 
     system_prompt, user_prompt = get_prompts(scrape_result)
+
+    logger.debug(f"System Prompt: {system_prompt}")
+    logger.debug(f"User Prompt: {user_prompt}")
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -310,14 +314,14 @@ def get_prompts(scrape_result: dict):
         The headings will follow this hierarchical format:
         ```{example_input}```
 
+        Format your response as a JSON object following this example structure:
+        ```{example_output}```
+
         For each heading:
         1. Create a clear, factually accurate summary (1-2 sentences) that captures key points
         2. Prioritize content based on heading importance (h1 > h2 > h3 etc.)
         3. Ensure output follows the exact JSON structure shown in the example
         4. Exclude any additional text or formatting
-
-        Format your response as a JSON object following this example structure:
-        ```{example_output}```
     """
 
     return system_prompt, user_prompt
