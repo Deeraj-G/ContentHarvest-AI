@@ -1,13 +1,15 @@
 """
 A simple web scraper that scrapes a URL and returns the keywords and their associated information.
 """
+
 import os
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
-from backend.helpers.functions import relevant_information, scrape_url
+from backend.helpers.functions import vectorize_and_store_web_content, scrape_url
 from backend.models.init_db import init_mongodb
+from backend.models.mongodb import MongoDBManager
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,11 +19,14 @@ DATABASE_NAME = os.getenv("DATABASE_NAME")
 
 app = FastAPI()
 
+
 @asynccontextmanager
 async def lifespan():
     """Lifecycle manager for FastAPI app"""
     await init_mongodb(MONGODB_URL, DATABASE_NAME)
     yield
+    await MongoDBManager.close_mongodb()
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -34,6 +39,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+
 @app.post("/v1/tenants/{tenant_id}/scrape/")
 async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
     """
@@ -45,21 +51,18 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
             return {
                 "content": {
                     "success": False,
-                    "error": f"Scraping failed: {scrape_result['error']}"
+                    "error": f"Scraping failed: {scrape_result['error']}",
                 },
-                "status": HTTPStatus.BAD_REQUEST
+                "status": HTTPStatus.BAD_REQUEST,
             }
-        
-        process_result = await relevant_information(scrape_result, tenant_id=tenant_id)
-        return {
-            "content": process_result,
-            "status": HTTPStatus.OK
-        }
+
+        process_result = await vectorize_and_store_web_content(scrape_result, tenant_id=tenant_id)
+        return {"content": process_result, "status": HTTPStatus.OK}
     except Exception as e:
         return {
             "content": {
                 "success": False,
-                "error": f"Error during processing: {str(e)}"
+                "error": f"Error during processing: {str(e)}",
             },
-            "status": HTTPStatus.INTERNAL_SERVER_ERROR
+            "status": HTTPStatus.INTERNAL_SERVER_ERROR,
         }
