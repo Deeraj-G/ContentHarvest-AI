@@ -252,7 +252,7 @@ def vectorize_information_to_qdrant(
 
 def get_prompts(scrape_result: dict):
     """
-    Static system prompt for the LLM
+    Static system and user prompts for the LLM
     """
 
     example_raw_text = """
