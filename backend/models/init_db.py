@@ -5,7 +5,8 @@ This file contains the initialization code for MongoDB connection using Beanie.
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
-from backend.models.mongodb import WebContent
+from backend.models.mongodb import WebContent, MongoDBManager
+
 
 async def init_mongodb(mongodb_url: str, database_name: str):
     """
@@ -17,9 +18,10 @@ async def init_mongodb(mongodb_url: str, database_name: str):
     """
     # Create Motor client
     client = AsyncIOMotorClient(mongodb_url)
+    MongoDBManager.set_client(client)
 
     # Initialize Beanie with the MongoDB client
     await init_beanie(
         database=client[database_name],
         document_models=[WebContent]  # Add all document models here
-    ) 
+    )
