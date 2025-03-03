@@ -261,17 +261,13 @@ def get_prompts(scrape_result: dict):
     """
 
     example_raw_text = """
-    Introduction to Machine Learning
-    Machine learning represents a fundamental shift in how computers operate. Instead of following explicit programming instructions, these systems learn patterns from data. This revolutionary approach has transformed various industries and continues to drive innovation in technology. The field combines statistics, computer science, and data analysis to create powerful predictive models.
+    Introduction to Machine Learning ( ML ) represents a fundamental shift in how computers operate. Instead of following explicit programming instructions, these systems learn patterns from data. This revolutionary approach has transformed various industries and continues to drive innovation in technology. The field combines statistics, computer science, and data analysis to create powerful predictive models.
 
-    Supervised Learning Methods
-    Among the various approaches in machine learning, supervised learning stands as one of the most widely used techniques. In this method, algorithms learn from labeled datasets where the desired output is known. For instance, when training a model to recognize spam emails, we provide examples of both spam and legitimate emails. The algorithm learns to identify patterns and features that distinguish between these categories. Common algorithms include decision trees, which make sequential decisions based on data features, and support vector machines, which find optimal boundaries between different classes of data.
+    Among the various approaches in machine learning, Supervised Learning Methods stands as one of the most widely used techniques. In this method, algorithms learn from labeled datasets where the desired output is known. For instance, when training a model to recognize spam emails, we provide examples of both spam and legitimate emails. The algorithm learns to identify patterns and features that distinguish between these categories. Common algorithms include decision trees, which make sequential decisions based on data features, and support vector machines, which find optimal boundaries between different classes of data.
 
-    Deep Learning Applications
-    The impact of deep learning on modern technology cannot be overstated. In healthcare, deep learning models analyze medical images to detect diseases with remarkable accuracy. Self-driving cars use deep learning to interpret their environment and make real-time decisions. Natural language processing applications powered by deep learning have made machine translation and voice assistants part of our daily lives.
+    The impact of Deep Learning Applications on modern technology cannot be overstated. In healthcare, deep learning models analyze medical images to detect diseases with remarkable accuracy. Self-driving cars use deep learning to interpret their environment and make real-time decisions. Natural language processing applications powered by deep learning have made machine translation and voice assistants part of our daily lives.
 
-    Neural Networks and Deep Learning
-    At the core of deep learning are neural networks, sophisticated mathematical models inspired by the human brain. These networks consist of layers of interconnected nodes, each performing specific computations. The "deep" in deep learning refers to the multiple layers that allow these networks to learn increasingly complex features. For example, in image recognition, early layers might detect simple edges, while deeper layers recognize complex objects like faces or vehicles.
+    Neural Networks and Deep Learning are at the core of these advances. These networks consist of layers of interconnected nodes, each performing specific computations. The \" deep \" in deep learning refers to the multiple layers that allow these networks to learn increasingly complex features. For example, in image recognition, early layers might detect simple edges, while deeper layers recognize complex objects like faces or vehicles.
     """
 
     example_input = [
@@ -303,20 +299,23 @@ def get_prompts(scrape_result: dict):
     user_prompt = f"""
         Your task is to analyze the following text and extract key information for each heading:
 
-        TEXT: ```{scrape_result["information"]["all_text"][:TEXT_LIMIT]}```
+        ### CURRENT CONTENT TO ANALYZE ###
+        TEXT: {scrape_result["information"]["all_text"][:TEXT_LIMIT]}
 
         HEADINGS: The document contains {len(scrape_result["information"]["headings"])} headings. 
         First {HEADING_LIMIT} headings for reference: ```{scrape_result["information"]["headings"][:HEADING_LIMIT]}```
 
-        Here is an example of the input text format:
-        ```{example_raw_text}```
+        ### EXAMPLES ###
+        EXAMPLE RAW TEXT:
+        {example_raw_text}
 
-        The headings will follow this hierarchical format:
-        ```{example_input}```
+        EXAMPLE INPUT:
+        {example_input}
 
-        Format your response as a JSON object following this example structure:
-        ```{example_output}```
+        EXAMPLE OUTPUT:
+        {example_output}
 
+        ### REQUIREMENTS ###
         For each heading:
         1. Create a clear, factually accurate summary (1-2 sentences) that captures key points
         2. Prioritize content based on heading importance (h1 > h2 > h3 etc.)
