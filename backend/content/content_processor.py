@@ -13,8 +13,8 @@ from openai import OpenAI
 from loguru import logger
 
 from backend.rag.qdrant import QdrantVectorStore
-from backend.models.models import ContentProcessor
-from backend.models.mongodb import MongoDBManager
+from backend.services.vector_schemas import ContentProcessor
+from backend.models.mongo.db_manager import MongoDBManager
 
 
 load_dotenv()
@@ -170,7 +170,7 @@ async def vectorize_and_store_web_content(
         )
 
         logger.info("Storing information in Qdrant...")
-    
+
         return {
             "success": True,
             "information": cleaned_content,

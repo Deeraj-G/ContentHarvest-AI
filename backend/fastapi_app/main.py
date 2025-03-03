@@ -9,9 +9,12 @@ from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from backend.helpers.functions import vectorize_and_store_web_content, scrape_url
-from backend.models.init_db import init_mongodb
-from backend.models.mongodb import MongoDBManager
+from backend.content.content_processor import (
+    vectorize_and_store_web_content,
+    scrape_url,
+)
+from backend.models.mongo.db_init import init_mongodb
+from backend.models.mongo.db_manager import MongoDBManager
 
 load_dotenv()
 
