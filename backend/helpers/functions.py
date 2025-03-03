@@ -98,20 +98,17 @@ async def vectorize_and_store_web_content(
         logger.error(
             f"Cannot process information - web scraping failed: {scrape_result['error']}"
         )
-        return vectorize_and_store_return_message(
-            success=False,
-            information=None,
-            storage_success=False,
-            error=f"Web scraping failed: {scrape_result['error']}",
-        )
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Web scraping failed: {scrape_result['error']}",
+        }
 
     # Prepare and store vectors in Qdrant
     processor = ContentProcessor(tenant_id=tenant_id)
 
     system_prompt, user_prompt = get_prompts(scrape_result)
-
-    logger.debug(f"System Prompt: {system_prompt}")
-    logger.debug(f"User Prompt: {user_prompt}")
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -151,6 +148,8 @@ async def vectorize_and_store_web_content(
             tenant_id=tenant_id,
         )
 
+        logger.info(f"Successfully stored information in MongoDB: {mongo_result.id}")
+
         # Add the LLM processed result
         processor.add_payload(
             content={
@@ -162,18 +161,22 @@ async def vectorize_and_store_web_content(
             url=scrape_result["original_url"],
         )
 
+        logger.info("Successfully added payload to processor")
+
         qdrant_storage_result = vectorize_information_to_qdrant(
             vector_payloads=processor.get_payloads(),
             tenant_id=tenant_id,
             collection_name="web_content",
         )
 
-        return vectorize_and_store_return_message(
-            success=True,
-            information=cleaned_content,
-            storage_success=qdrant_storage_result["success"],
-            error=None,
-        )
+        logger.info("Storing information in Qdrant...")
+    
+        return {
+            "success": True,
+            "information": cleaned_content,
+            "storage_success": qdrant_storage_result["success"],
+            "error": None,
+        }
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
 
@@ -188,6 +191,8 @@ async def vectorize_and_store_web_content(
             tenant_id=tenant_id,
         )
 
+        logger.info(f"Stored error information in MongoDB: {mongo_result.id}")
+
         # Add the LLM processed result
         processor.add_payload(
             content={
@@ -199,18 +204,22 @@ async def vectorize_and_store_web_content(
             url=scrape_result["original_url"],
         )
 
+        logger.info("Successfully added payload to processor")
+
         qdrant_storage_result = vectorize_information_to_qdrant(
             vector_payloads=processor.get_payloads(),
             tenant_id=tenant_id,
             collection_name="web_content",
         )
 
-        return vectorize_and_store_return_message(
-            success=False,
-            information=None,
-            storage_success=qdrant_storage_result["success"],
-            error=f"Error during information identification: {str(e)}",
-        )
+        logger.info("Storing information in Qdrant...")
+
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": qdrant_storage_result["success"],
+            "error": f"Error during information identification: {str(e)}",
+        }
 
 
 # Store the list of vector payloads into Qdrant
@@ -228,7 +237,7 @@ def vectorize_information_to_qdrant(
         }
     """
     try:
-        logger.debug("Preparing to store information in Qdrant")
+        logger.debug("Preparing to store information in Qdrant...")
         qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
 
         info = qdrant_client.insert_data_to_qdrant(
@@ -237,22 +246,8 @@ def vectorize_information_to_qdrant(
         logger.info(f"Successfully stored information in Qdrant: {info}")
         return {"success": True, "info": info, "error": None}
     except Exception as e:
-        logger.error(f"Failed to store information in Qdrant: {str(e)}")
+        logger.error(f"Failed to store information in Qdrant with error: {str(e)}")
         return {"success": False, "info": None, "error": str(e)}
-
-
-def vectorize_and_store_return_message(
-    success: bool, information: dict, storage_success: bool, error: str
-) -> dict:
-    """
-    Return a message with the success, information, storage success, and error.
-    """
-    return {
-        "success": success,
-        "information": information,
-        "storage_success": storage_success,
-        "error": error,
-    }
 
 
 def get_prompts(scrape_result: dict):
@@ -322,5 +317,8 @@ def get_prompts(scrape_result: dict):
         3. Ensure output follows the exact JSON structure shown in the example
         4. Exclude any additional text or formatting
     """
+
+    logger.debug(f"System Prompt: {system_prompt}")
+    logger.debug(f"User Prompt: {user_prompt}")
 
     return system_prompt, user_prompt
