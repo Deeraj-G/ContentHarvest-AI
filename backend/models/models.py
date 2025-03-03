@@ -12,6 +12,7 @@ class VectorPayload(BaseModel):
     """
     This class is used to store the vector payloads in the format expected by Qdrant.
     """
+
     vector: List[float]
     payload: Dict[str, Any]
 
@@ -20,6 +21,7 @@ class ContentProcessor(BaseModel):
     """
     This class is used to process the content and store it in Qdrant.
     """
+
     tenant_id: Union[UUID, None] = None
     vector_payloads: List[VectorPayload] = []
 
@@ -39,7 +41,7 @@ class ContentProcessor(BaseModel):
                 "tenant_id": self.tenant_id,
                 "content": content,
                 "timestamp": datetime.now().isoformat(),
-            }
+            },
         )
         self.vector_payloads.append(payload)
 
