@@ -2,7 +2,6 @@
 This module contains the prompts for the content processor.
 """
 
-from loguru import logger
 
 def get_prompts(headings_subset: dict, limited_text: str):
     """
@@ -71,8 +70,5 @@ def get_prompts(headings_subset: dict, limited_text: str):
         3. Ensure output follows the exact JSON structure shown in the example
         4. Exclude any additional text or formatting
     """
-
-    logger.info(f"System Prompt: {system_prompt}")
-    logger.info(f"User Prompt: {user_prompt}")
 
     return system_prompt, user_prompt
