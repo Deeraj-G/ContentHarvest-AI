@@ -3,7 +3,7 @@ This file contains the Pydantic models for the application.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel
 
@@ -22,7 +22,7 @@ class ContentProcessor(BaseModel):
     This class is used to process the content and store it in Qdrant.
     """
 
-    tenant_id: Union[UUID, None] = None
+    tenant_id: UUID
     vector_payloads: List[VectorPayload] = []
 
     def add_payload(self, content: dict, url: str) -> None:
