@@ -36,7 +36,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # Scrape the URL and return the text
-def scrape_url(url: str) -> dict:
+async def scrape_url(url: str) -> dict:
     """
     Scrapes a URL and returns the content with metadata.
 
@@ -56,28 +56,25 @@ def scrape_url(url: str) -> dict:
     logger.info(f"Starting to scrape URL: {url}")
     try:
         response = requests.get(url, timeout=10)
-        logger.info(f"Response status code: {response.status_code}")
 
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)
-        logger.info(f"Extracted text length: {len(all_text)}")
 
-        headings = []
+        # Initialize the headings dictionary with buckets for each heading level
+        headings = {"h1": [], "h2": [], "h3": [], "h4": [], "h5": [], "h6": []}
 
         # Find all headings within the url
         for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
             title = tag.get_text(strip=True)  # Get cleaned title content
             level = tag.name  # Get heading level (h1-h6)
 
-            headings.append({title: level})
-
-        logger.info(f"Successfully scraped URL: {url}")
+            headings[level].append(title)
 
         return {
             "success": True,
             "information": {"all_text": all_text, "headings": headings},
-            "original_url": url,
+            "url": url,
             "error": None,
         }
 
@@ -86,7 +83,7 @@ def scrape_url(url: str) -> dict:
         return {
             "success": False,
             "information": None,
-            "original_url": url,
+            "url": url,
             "error": str(e),
         }
 
@@ -101,27 +98,20 @@ async def vectorize_and_store_web_content(
     """
     logger.info("Starting information identification")
 
-    # If the web scraping failed, return the error
-    if not scrape_result["success"]:
-        logger.error(
-            f"Cannot process information - web scraping failed: {scrape_result['error']}"
-        )
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": False,
-            "error": f"Web scraping failed: {scrape_result['error']}",
-        }
-
     # Prepare and store vectors in Qdrant
     processor = ContentProcessor(tenant_id=tenant_id)
+    collected_headings = {}
+    
+    # Add all headings from most important to least important
+    for level in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+        if level in scrape_result["information"]["headings"]:
+            collected_headings[level] = scrape_result["information"]["headings"][level][:HEADING_LIMIT - len(collected_headings)]
+            if len(collected_headings) >= HEADING_LIMIT:
+                break
 
-    # Get the system and user prompts
     system_prompt, user_prompt = get_prompts(
-        scrape_result["information"]["headings"],
-        scrape_result["information"]["all_text"],
-        text_limit=TEXT_LIMIT,
-        heading_limit=HEADING_LIMIT,
+        headings_subset=collected_headings,
+        limited_text=scrape_result["information"]["all_text"][:TEXT_LIMIT],
     )
 
     messages = [
@@ -129,7 +119,6 @@ async def vectorize_and_store_web_content(
         {"role": "user", "content": user_prompt},
     ]
 
-    # Call LLM
     try:
         logger.info("Sending request to OpenAI...")
         response = client.chat.completions.create(
@@ -143,21 +132,17 @@ async def vectorize_and_store_web_content(
             f"Successfully received and processed OpenAI response: {llm_response}"
         )
 
-        information_content = llm_response["choices"][0]["message"]["content"]
+        # Clean the LLM response
+        cleaned_content = llm_response["choices"][0]["message"]["content"].replace("```json", "").replace("```", "").strip()
 
-        # Clean and parse the LLM response
-        cleaned_content = (
-            information_content.replace("```json", "").replace("```", "").strip()
-        )
         logger.info(f"Cleaned content: {cleaned_content}")
 
         # Store full content in MongoDB
         mongo_result = await MongoDBManager.insert_web_content(
-            url=scrape_result["original_url"],
-            raw_text=scrape_result["all_text"],
-            headings=scrape_result["headings"],
-            llm_raw_response=llm_response,
-            processed_content=cleaned_content,
+            url=scrape_result["url"],
+            raw_text=scrape_result["information"]["all_text"],
+            headings=scrape_result["information"]["headings"],
+            llm_cleaned_content=cleaned_content,
             metadata=scrape_result["metadata"],
             tenant_id=tenant_id,
         )
@@ -167,12 +152,12 @@ async def vectorize_and_store_web_content(
         # Add the LLM processed result
         processor.add_payload(
             content={
-                "llm_response": cleaned_content,
-                "all_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "headings": scrape_result["information"]["headings"][:HEADING_LIMIT],
+                "llm_cleaned_content": cleaned_content,
+                "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
+                "input_headings": collected_headings,
                 "mongo_id": str(mongo_result.id),
             },
-            url=scrape_result["original_url"],
+            url=scrape_result["url"],
         )
 
         logger.info("Successfully added payload to processor")
@@ -196,11 +181,10 @@ async def vectorize_and_store_web_content(
 
         # Store full content in MongoDB
         mongo_result = await MongoDBManager.insert_web_content(
-            url=scrape_result["original_url"],
-            raw_text=scrape_result["all_text"],
-            headings=scrape_result["headings"],
-            llm_raw_response=None,
-            processed_content=None,
+            url=scrape_result["url"],
+            raw_text=scrape_result["information"]["all_text"],
+            headings=scrape_result["information"]["headings"],
+            llm_cleaned_content=None,
             metadata=scrape_result["metadata"],
             tenant_id=tenant_id,
         )
@@ -210,12 +194,12 @@ async def vectorize_and_store_web_content(
         # Add the LLM processed result
         processor.add_payload(
             content={
-                "llm_response": None,
-                "all_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "headings": scrape_result["information"]["headings"][:HEADING_LIMIT],
+                "llm_cleaned_content": None,
+                "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
+                "input_headings": collected_headings,
                 "mongo_id": str(mongo_result.id),
             },
-            url=scrape_result["original_url"],
+            url=scrape_result["url"],
         )
 
         logger.debug("Successfully added payload to processor")
