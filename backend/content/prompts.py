@@ -4,9 +4,9 @@ This module contains the prompts for the content processor.
 
 from loguru import logger
 
-def get_prompts(headings: list, text: str, text_limit: int = 4000, heading_limit: int = 10):
+def get_prompts(headings_subset: dict, limited_text: str):
     """
-    Static system and user prompts for the LLM
+    system and user prompts for the LLM
     """
 
     example_raw_text = """
@@ -19,20 +19,19 @@ def get_prompts(headings: list, text: str, text_limit: int = 4000, heading_limit
     Neural Networks and Deep Learning are at the core of these advances. These networks consist of layers of interconnected nodes, each performing specific computations. The \" deep \" in deep learning refers to the multiple layers that allow these networks to learn increasingly complex features. For example, in image recognition, early layers might detect simple edges, while deeper layers recognize complex objects like faces or vehicles.
     """
 
-    example_input = [
-        {"Introduction to Machine Learning": "h1"},
-        {"Supervised Learning Methods": "h2"},
-        {"Deep Learning Applications": "h3"},
-        {"Neural Networks and Deep Learning": "h2"},
-    ]
+    example_input = {
+        "h1": ["Introduction to Machine Learning"],
+        "h2": ["Supervised Learning Methods", "Neural Networks and Deep Learning"],
+        "h3": ["Deep Learning Applications"],
+    }
 
     example_output = {
         "information": {
             "headings": {
                 "Introduction to Machine Learning": "Machine learning represents a fundamental shift in how computers operate, enabling systems to learn patterns from data rather than following explicit programming instructions. This field combines statistics, computer science, and data analysis to create powerful predictive models.",
                 "Supervised Learning Methods": "Supervised learning algorithms learn from labeled datasets where the desired output is known, using techniques like decision trees and support vector machines to identify patterns and make predictions. This approach is widely used for classification tasks like spam detection.",
-                "Deep Learning Applications": "Deep learning has revolutionized multiple sectors, from healthcare (medical image analysis) to autonomous vehicles and natural language processing, enabling sophisticated real-time decision making and analysis.",
                 "Neural Networks and Deep Learning": "Neural networks are mathematical models inspired by the human brain, consisting of multiple layers of interconnected nodes that process information with increasing complexity. These layers progress from detecting simple features to recognizing complex patterns in data.",
+                "Deep Learning Applications": "Deep learning has revolutionized multiple sectors, from healthcare (medical image analysis) to autonomous vehicles and natural language processing, enabling sophisticated real-time decision making and analysis.",
             }
         }
     }
@@ -49,20 +48,21 @@ def get_prompts(headings: list, text: str, text_limit: int = 4000, heading_limit
         Your task is to analyze the following text and extract key information for each heading:
 
         ### CURRENT CONTENT TO ANALYZE ###
-        TEXT: {text[:text_limit]}
+        TEXT:
+        ```{limited_text}```
 
-        HEADINGS: The document contains {len(headings)} headings.
-        First {heading_limit} headings for reference: ```{headings[:heading_limit]}```
+        HEADINGS:
+        ```{headings_subset}```
 
         ### EXAMPLES ###
         EXAMPLE RAW TEXT:
-        {example_raw_text}
+        ```{example_raw_text}```
 
         EXAMPLE INPUT:
-        {example_input}
+        ```{example_input}```
 
         EXAMPLE OUTPUT:
-        {example_output}
+        ```{example_output}```
 
         ### REQUIREMENTS ###
         For each heading:
