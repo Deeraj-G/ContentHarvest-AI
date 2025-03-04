@@ -33,8 +33,7 @@ class MongoDBManager:
         url: str,
         raw_text: str,
         headings: List[Dict[str, Any]],
-        llm_raw_response: Dict[str, Any],
-        processed_content: Dict[str, Any],
+        llm_cleaned_content: Dict[str, Any],
         metadata: Dict[str, Any],
         tenant_id: Optional[UUID] = None,
     ) -> WebContent:
@@ -56,8 +55,7 @@ class MongoDBManager:
             url=url,
             raw_text=raw_text,
             headings=headings,
-            llm_raw_response=llm_raw_response,
-            processed_content=processed_content,
+            llm_cleaned_content=llm_cleaned_content,
             metadata=metadata,
         )
         return await content.insert()

@@ -21,10 +21,7 @@ class WebContent(Document):
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata about the content"
     )
-    llm_raw_response: str = Field(
-        description="Original response from LLM before processing"
-    )
-    processed_content: Dict[str, Any] = Field(
+    llm_cleaned_content: Dict[str, Any] = Field(
         default_factory=dict, description="Processed and structured content from LLM"
     )
     created_at: datetime = Field(default_factory=datetime.now())
