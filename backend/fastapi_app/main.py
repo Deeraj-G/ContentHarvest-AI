@@ -3,11 +3,13 @@ Host the FastAPI app.
 """
 
 import os
+from uuid import UUID
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from loguru import logger
 
 from backend.content.content_processor import (
     vectorize_and_store_web_content,
@@ -25,7 +27,7 @@ app = FastAPI()
 
 
 @asynccontextmanager
-async def lifespan():
+async def lifespan(fastapi_app: FastAPI):
     """Lifecycle manager for FastAPI app"""
     await init_mongodb(MONGODB_URL, DATABASE_NAME)
     yield
@@ -49,7 +51,18 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
     """
     This endpoint handles the web scraper.
     """
+
+    if not tenant_id:
+        return {
+            "content": {
+                "success": False,
+                "error": "Tenant ID is required",
+            },
+            "status": HTTPStatus.BAD_REQUEST,
+        }
+
     try:
+        logger.info(f"web scrape started for tenant: {tenant_id}")
         scrape_result = await scrape_url(url)  # This is sync
         if not scrape_result["success"]:
             return {
@@ -61,7 +74,7 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
             }
 
         process_result = await vectorize_and_store_web_content(
-            scrape_result, tenant_id=tenant_id
+            scrape_result, tenant_id=UUID(tenant_id)
         )
         return {"content": process_result, "status": HTTPStatus.OK}
     except Exception as e:
