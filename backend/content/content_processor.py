@@ -159,7 +159,7 @@ async def call_openai_api(messages: list) -> dict:
     """
     try:
         logger.info("Sending request to OpenAI...")
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             timeout=30,
