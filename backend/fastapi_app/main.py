@@ -50,7 +50,7 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
     This endpoint handles the web scraper.
     """
     try:
-        scrape_result = scrape_url(url)  # This is sync
+        scrape_result = await scrape_url(url)  # This is sync
         if not scrape_result["success"]:
             return {
                 "content": {
