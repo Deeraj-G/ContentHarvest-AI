@@ -12,6 +12,7 @@ Essential for building a content ingestion pipeline that transforms raw web data
 
 import os
 import re
+import json
 from uuid import UUID
 
 import requests
@@ -45,15 +46,13 @@ async def scrape_url(url: str) -> dict:
 
     Returns:
         dict: {
+            "url": str,
+            "information": dict | None,
             "success": bool,
-            "original_url": str,
-            "all_text": str | None,
-            "headings": list | None,
-            "metadata": dict | None,
             "error": str | None
         }
     """
-    logger.info(f"Starting to scrape URL: {url}")
+    logger.info("starting to scrape URL")
     try:
         response = requests.get(url, timeout=10)
 
@@ -72,26 +71,24 @@ async def scrape_url(url: str) -> dict:
             headings[level].append(title)
 
         return {
-            "success": True,
-            "information": {"all_text": all_text, "headings": headings},
             "url": url,
+            "information": {"all_text": all_text, "headings": headings},
+            "success": True,
             "error": None,
         }
 
     except Exception as e:
         logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
-            "success": False,
-            "information": None,
             "url": url,
+            "information": None,
+            "success": False,
             "error": str(e),
         }
 
 
 # Query to LLM to identify the relevant information based on the text
-async def vectorize_and_store_web_content(
-    scrape_result: dict, tenant_id: UUID = None
-) -> dict:
+async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) -> dict:
     """
     Store content in both MongoDB and Qdrant.
     MongoDB gets the full content, Qdrant gets the vectors for search.
@@ -101,11 +98,13 @@ async def vectorize_and_store_web_content(
     # Prepare and store vectors in Qdrant
     processor = ContentProcessor(tenant_id=tenant_id)
     collected_headings = {}
-    
+
     # Add all headings from most important to least important
     for level in ["h1", "h2", "h3", "h4", "h5", "h6"]:
         if level in scrape_result["information"]["headings"]:
-            collected_headings[level] = scrape_result["information"]["headings"][level][:HEADING_LIMIT - len(collected_headings)]
+            collected_headings[level] = scrape_result["information"]["headings"][level][
+                : HEADING_LIMIT - len(collected_headings)
+            ]
             if len(collected_headings) >= HEADING_LIMIT:
                 break
 
@@ -119,6 +118,45 @@ async def vectorize_and_store_web_content(
         {"role": "user", "content": user_prompt},
     ]
 
+    # Call OpenAI API
+    llm_response = await call_openai_api(messages)
+    if not llm_response["success"]:
+        return llm_response
+
+    # Clean the LLM response
+    cleaned_llm_response = json.loads(llm_response["choices"][0]["message"]["content"])
+    logger.info(f"Cleaned LLM response: {cleaned_llm_response}")
+
+    # Store result in MongoDB
+    mongo_result_response = await store_result_in_mongodb(
+        scrape_result, cleaned_llm_response, tenant_id
+    )
+    if not mongo_result_response["success"]:
+        return mongo_result_response
+
+    # Add the LLM processed result
+    processor.add_payload(
+        content={
+            "cleaned_llm_response": cleaned_llm_response,
+            "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
+            "input_headings": collected_headings,
+            "mongo_id": str(mongo_result_response["mongo_result"].id),
+        },
+        url=scrape_result["url"],
+    )
+
+    logger.info("Successfully added payload to processor")
+
+    # Store in Qdrant
+    qdrant_response = await add_payload_and_store_in_qdrant(processor, tenant_id)
+    return qdrant_response
+
+
+# Call OpenAI API and handle exceptions
+async def call_openai_api(messages: list) -> dict:
+    """
+    Call OpenAI API
+    """
     try:
         logger.info("Sending request to OpenAI...")
         response = client.chat.completions.create(
@@ -126,103 +164,73 @@ async def vectorize_and_store_web_content(
             messages=messages,
             timeout=30,
         )
+        return response.model_dump()
+    except Exception as e:
+        logger.error(f"Error during OpenAI API call: {str(e)}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Error during information identification: {str(e)}",
+        }
 
-        llm_response = response.model_dump()
-        logger.info(
-            f"Successfully received and processed OpenAI response: {llm_response}"
-        )
 
-        # Clean the LLM response
-        cleaned_llm_response = llm_response["choices"][0]["message"]["content"].replace("```json", "").replace("```", "").strip()
-
-        logger.info(f"Cleaned LLM response: {cleaned_llm_response}")
-
-        # Store full result in MongoDB
+# Store result in MongoDB and handle exceptions
+async def store_result_in_mongodb(
+    scrape_result: dict, cleaned_llm_response: dict, tenant_id: UUID
+) -> dict:
+    """
+    Store the result in MongoDB
+    """
+    try:
         mongo_result = await MongoDBManager.insert_web_content(
             url=scrape_result["url"],
             raw_text=scrape_result["information"]["all_text"],
             headings=scrape_result["information"]["headings"],
             llm_cleaned_content=cleaned_llm_response,
-            metadata=scrape_result["metadata"],
+            metadata=None,
             tenant_id=tenant_id,
         )
-
         logger.info(f"Successfully stored result in MongoDB: {mongo_result.id}")
-
-        # Add the LLM processed result
-        processor.add_payload(
-            content={
-                "cleaned_llm_response": cleaned_llm_response,
-                "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "input_headings": collected_headings,
-                "mongo_id": str(mongo_result.id),
-            },
-            url=scrape_result["url"],
-        )
-
-        logger.info("Successfully added payload to processor")
-
-        qdrant_storage_result = vectorize_information_to_qdrant(
-            vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id,
-            collection_name="web_content",
-        )
-
-        logger.info("Storing information in Qdrant...")
-
-        return {
-            "success": True,
-            "cleaned_llm_response": cleaned_llm_response,
-            "storage_success": qdrant_storage_result["success"],
-            "error": None,
-        }
+        return {"success": True, "mongo_result": mongo_result}
     except Exception as e:
-        logger.error(f"Error during OpenAI API call: {str(e)}")
-
-        # Store full content in MongoDB
-        mongo_result = await MongoDBManager.insert_web_content(
-            url=scrape_result["url"],
-            raw_text=scrape_result["information"]["all_text"],
-            headings=scrape_result["information"]["headings"],
-            llm_cleaned_content=None,
-            metadata=scrape_result["metadata"],
-            tenant_id=tenant_id,
-        )
-
-        logger.debug(f"Stored error information in MongoDB: {mongo_result.id}")
-
-        # Add the LLM processed result
-        processor.add_payload(
-            content={
-                "cleaned_llm_response": None,
-                "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "input_headings": collected_headings,
-                "mongo_id": str(mongo_result.id),
-            },
-            url=scrape_result["url"],
-        )
-
-        logger.debug("Successfully added payload to processor")
-
-        qdrant_storage_result = vectorize_information_to_qdrant(
-            vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id,
-            collection_name="web_content",
-        )
-
-        logger.debug("Storing information in Qdrant...")
-
+        logger.error(f"Error during MongoDB storage: {str(e)}")
         return {
             "success": False,
             "information": None,
-            "storage_success": qdrant_storage_result["success"],
-            "error": f"Error during information identification: {str(e)}",
+            "storage_success": False,
+            "error": f"Error during MongoDB storage: {str(e)}",
+        }
+
+
+# Add payload and store in Qdrant, handling exceptions
+async def add_payload_and_store_in_qdrant(
+    processor: ContentProcessor, tenant_id: UUID
+) -> dict:
+    """
+    Add payload and store in Qdrant
+    """
+    try:
+        qdrant_storage_result = vectorize_information_to_qdrant(
+            vector_payloads=processor.get_payloads(),
+            tenant_id=tenant_id,
+            collection_name="web_content",
+        )
+        logger.info("Storing information in Qdrant...")
+        return {"success": True, "storage_success": qdrant_storage_result["success"]}
+    except Exception as e:
+        logger.error(f"Error during Qdrant storage: {str(e)}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Error during Qdrant storage: {str(e)}",
         }
 
 
 # Store the list of vector payloads into Qdrant
 def vectorize_information_to_qdrant(
-    vector_payloads: list, collection_name: str, tenant_id: str = None
+    vector_payloads: list, collection_name: str, tenant_id: UUID
 ) -> dict:
     """
     Store the processed information in Qdrant
