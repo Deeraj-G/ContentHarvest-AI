@@ -133,26 +133,26 @@ async def vectorize_and_store_web_content(
         )
 
         # Clean the LLM response
-        cleaned_content = llm_response["choices"][0]["message"]["content"].replace("```json", "").replace("```", "").strip()
+        cleaned_llm_response = llm_response["choices"][0]["message"]["content"].replace("```json", "").replace("```", "").strip()
 
-        logger.info(f"Cleaned content: {cleaned_content}")
+        logger.info(f"Cleaned LLM response: {cleaned_llm_response}")
 
-        # Store full content in MongoDB
+        # Store full result in MongoDB
         mongo_result = await MongoDBManager.insert_web_content(
             url=scrape_result["url"],
             raw_text=scrape_result["information"]["all_text"],
             headings=scrape_result["information"]["headings"],
-            llm_cleaned_content=cleaned_content,
+            llm_cleaned_content=cleaned_llm_response,
             metadata=scrape_result["metadata"],
             tenant_id=tenant_id,
         )
 
-        logger.info(f"Successfully stored information in MongoDB: {mongo_result.id}")
+        logger.info(f"Successfully stored result in MongoDB: {mongo_result.id}")
 
         # Add the LLM processed result
         processor.add_payload(
             content={
-                "llm_cleaned_content": cleaned_content,
+                "cleaned_llm_response": cleaned_llm_response,
                 "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
                 "input_headings": collected_headings,
                 "mongo_id": str(mongo_result.id),
@@ -172,7 +172,7 @@ async def vectorize_and_store_web_content(
 
         return {
             "success": True,
-            "information": cleaned_content,
+            "cleaned_llm_response": cleaned_llm_response,
             "storage_success": qdrant_storage_result["success"],
             "error": None,
         }
@@ -194,7 +194,7 @@ async def vectorize_and_store_web_content(
         # Add the LLM processed result
         processor.add_payload(
             content={
-                "llm_cleaned_content": None,
+                "cleaned_llm_response": None,
                 "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
                 "input_headings": collected_headings,
                 "mongo_id": str(mongo_result.id),
