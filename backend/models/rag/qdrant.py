@@ -51,7 +51,7 @@ class QdrantVectorStore:
         except Exception as e:
             raise Exception(f"Failed to connect to Qdrant: {str(e)}")
 
-    def insert_data_to_qdrant(self, vector_payloads: list, collection_name: str):
+    async def insert_data_to_qdrant(self, vector_payloads: list, collection_name: str):
         """
         Insert vector embeddings and their associated payloads into Qdrant
 
@@ -65,7 +65,7 @@ class QdrantVectorStore:
         """
         session_id = str(uuid.uuid4())  # Create one session_id for the group
         try:
-            info = self.client.upsert(
+            info = await self.client.upsert(
                 collection_name=collection_name,
                 wait=True,  # Wait for operation to complete
                 points=[
@@ -86,7 +86,7 @@ class QdrantVectorStore:
             logger.error(f"Error inserting data to Qdrant: {e}")
             raise e
 
-    def search_data_from_qdrant(
+    async def search_data_from_qdrant(
         self, collection_name: str, query: str, tenant_id: UUID, limit: int = 5
     ):
         """
@@ -112,7 +112,7 @@ class QdrantVectorStore:
         )
 
         # Perform the search using Qdrant client
-        return self.client.search(
+        return await self.client.search(
             collection_name=collection_name,
             query_vector=query,
             tenant_id=tenant_id,

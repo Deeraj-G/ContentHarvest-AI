@@ -159,7 +159,7 @@ async def call_openai_api(messages: list) -> dict:
     """
     try:
         logger.info("Sending request to OpenAI...")
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             timeout=30,
@@ -211,7 +211,7 @@ async def add_payload_and_store_in_qdrant(
     Add payload and store in Qdrant
     """
     try:
-        qdrant_storage_result = vectorize_information_to_qdrant(
+        qdrant_storage_result = await vectorize_information_to_qdrant(
             vector_payloads=processor.get_payloads(),
             tenant_id=tenant_id,
             collection_name="web_content",
@@ -229,7 +229,7 @@ async def add_payload_and_store_in_qdrant(
 
 
 # Store the list of vector payloads into Qdrant
-def vectorize_information_to_qdrant(
+async def vectorize_information_to_qdrant(
     vector_payloads: list, collection_name: str, tenant_id: UUID
 ) -> dict:
     """
@@ -246,7 +246,7 @@ def vectorize_information_to_qdrant(
         logger.info("Preparing to store information in Qdrant...")
         qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
 
-        info = qdrant_client.insert_data_to_qdrant(
+        info = await qdrant_client.insert_data_to_qdrant(
             vector_payloads=vector_payloads, collection_name=collection_name
         )
         logger.info(f"Successfully stored information in Qdrant: {info}")
