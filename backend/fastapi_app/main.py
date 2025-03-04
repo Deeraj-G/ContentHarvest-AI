@@ -1,5 +1,5 @@
 """
-A simple web scraper that scrapes a URL and returns the keywords and their associated information.
+Host the FastAPI app.
 """
 
 import os
@@ -47,7 +47,7 @@ app.add_middleware(
 @app.post("/v1/tenants/{tenant_id}/scrape/")
 async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
     """
-    This function handles the web scraper.
+    This endpoint handles the web scraper.
     """
     try:
         scrape_result = scrape_url(url)  # This is sync
