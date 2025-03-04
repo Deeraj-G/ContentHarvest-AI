@@ -1,9 +1,18 @@
 """
-This file contains the functions for the web scraper.
+Core functionality of the content processor.
+
+Key features:
+- Scraping web pages to extract relevant text and headings.
+- Vectorizing the scraped content for efficient search and retrieval.
+- Storing the raw and processed content in a MongoDB database.
+- Managing interactions with the Qdrant vector store for search capabilities.
+
+Essential for building a content ingestion pipeline that transforms raw web data into structured, searchable information.
 """
 
 import os
 import re
+import json
 from uuid import UUID
 
 import requests
@@ -12,23 +21,23 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from loguru import logger
 
-from backend.rag.qdrant import QdrantVectorStore
+from backend.models.rag.qdrant import QdrantVectorStore
 from backend.services.vector_schemas import ContentProcessor
 from backend.models.mongo.db_manager import MongoDBManager
+from backend.content.prompts import get_prompts
 
+
+TEXT_LIMIT = 4000
+HEADING_LIMIT = 10
 
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-TEXT_LIMIT = 4000
-HEADING_LIMIT = 10
-
 
 # Scrape the URL and return the text
-# Scrape based on bolded words (these are the most important words)
-def scrape_url(url: str) -> dict:
+async def scrape_url(url: str) -> dict:
     """
     Scrapes a URL and returns the content with metadata.
 
@@ -37,85 +46,117 @@ def scrape_url(url: str) -> dict:
 
     Returns:
         dict: {
+            "url": str,
+            "information": dict | None,
             "success": bool,
-            "original_url": str,
-            "all_text": str | None,
-            "headings": list | None,
-            "metadata": dict | None,
             "error": str | None
         }
     """
-    logger.info(f"Starting to scrape URL: {url}")
+    logger.info("starting to scrape URL")
     try:
         response = requests.get(url, timeout=10)
-        logger.info(f"Response status code: {response.status_code}")
 
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
         all_text = re.sub(r"\s+", " ", all_text)
-        logger.info(f"Extracted text length: {len(all_text)}")
 
-        headings = []
+        # Initialize the headings dictionary with buckets for each heading level
+        headings = {"h1": [], "h2": [], "h3": [], "h4": [], "h5": [], "h6": []}
 
         # Find all headings within the url
         for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
             title = tag.get_text(strip=True)  # Get cleaned title content
             level = tag.name  # Get heading level (h1-h6)
 
-            headings.append({title: level})
-
-        logger.info(f"Successfully scraped URL: {url}")
+            headings[level].append(title)
 
         return {
-            "success": True,
+            "url": url,
             "information": {"all_text": all_text, "headings": headings},
-            "original_url": url,
+            "success": True,
             "error": None,
         }
 
     except Exception as e:
         logger.error(f"Error scraping URL {url}: {str(e)}")
         return {
-            "success": False,
+            "url": url,
             "information": None,
-            "original_url": url,
+            "success": False,
             "error": str(e),
         }
 
 
 # Query to LLM to identify the relevant information based on the text
-async def vectorize_and_store_web_content(
-    scrape_result: dict, tenant_id: UUID = None
-) -> dict:
+async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) -> dict:
     """
     Store content in both MongoDB and Qdrant.
     MongoDB gets the full content, Qdrant gets the vectors for search.
     """
     logger.info("Starting information identification")
 
-    # If the web scraping failed, return the error
-    if not scrape_result["success"]:
-        logger.error(
-            f"Cannot process information - web scraping failed: {scrape_result['error']}"
-        )
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": False,
-            "error": f"Web scraping failed: {scrape_result['error']}",
-        }
-
     # Prepare and store vectors in Qdrant
     processor = ContentProcessor(tenant_id=tenant_id)
+    collected_headings = {}
 
-    system_prompt, user_prompt = get_prompts(scrape_result)
+    # Add all headings from most important to least important
+    for level in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+        if level in scrape_result["information"]["headings"]:
+            collected_headings[level] = scrape_result["information"]["headings"][level][
+                : HEADING_LIMIT - len(collected_headings)
+            ]
+            if len(collected_headings) >= HEADING_LIMIT:
+                break
+
+    system_prompt, user_prompt = get_prompts(
+        headings_subset=collected_headings,
+        limited_text=scrape_result["information"]["all_text"][:TEXT_LIMIT],
+    )
 
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
 
-    # Call LLM
+    # Call OpenAI API
+    llm_response = await call_openai_api(messages)
+    if not llm_response["success"]:
+        return llm_response
+
+    # Clean the LLM response
+    cleaned_llm_response = json.loads(llm_response["choices"][0]["message"]["content"])
+    logger.info(f"Cleaned LLM response: {cleaned_llm_response}")
+
+    # Store result in MongoDB
+    mongo_result_response = await store_result_in_mongodb(
+        scrape_result, cleaned_llm_response, tenant_id
+    )
+    if not mongo_result_response["success"]:
+        return mongo_result_response
+
+    # Add the LLM processed result
+    processor.add_payload(
+        content={
+            "cleaned_llm_response": cleaned_llm_response,
+            "input_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
+            "input_headings": collected_headings,
+            "mongo_id": str(mongo_result_response["mongo_result"].id),
+        },
+        url=scrape_result["url"],
+    )
+
+    logger.info("Successfully added payload to processor")
+
+    # Store in Qdrant
+    qdrant_response = await add_payload_and_store_in_qdrant(processor, tenant_id)
+    return qdrant_response
+
+
+# Call OpenAI API and handle exceptions
+async def call_openai_api(messages: list) -> dict:
+    """
+    Call OpenAI API
+    """
     try:
         logger.info("Sending request to OpenAI...")
         response = client.chat.completions.create(
@@ -123,108 +164,73 @@ async def vectorize_and_store_web_content(
             messages=messages,
             timeout=30,
         )
-
-        llm_response = response.model_dump()
-        logger.info(
-            f"Successfully received and processed OpenAI response: {llm_response}"
-        )
-
-        information_content = llm_response["choices"][0]["message"]["content"]
-
-        # Clean and parse the LLM response
-        cleaned_content = (
-            information_content.replace("```json", "").replace("```", "").strip()
-        )
-        logger.info(f"Cleaned content: {cleaned_content}")
-
-        # Store full content in MongoDB
-        mongo_result = await MongoDBManager.insert_web_content(
-            url=scrape_result["original_url"],
-            raw_text=scrape_result["all_text"],
-            headings=scrape_result["headings"],
-            llm_raw_response=llm_response,
-            processed_content=cleaned_content,
-            metadata=scrape_result["metadata"],
-            tenant_id=tenant_id,
-        )
-
-        logger.info(f"Successfully stored information in MongoDB: {mongo_result.id}")
-
-        # Add the LLM processed result
-        processor.add_payload(
-            content={
-                "llm_response": cleaned_content,
-                "all_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "headings": scrape_result["information"]["headings"][:HEADING_LIMIT],
-                "mongo_id": str(mongo_result.id),
-            },
-            url=scrape_result["original_url"],
-        )
-
-        logger.info("Successfully added payload to processor")
-
-        qdrant_storage_result = vectorize_information_to_qdrant(
-            vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id,
-            collection_name="web_content",
-        )
-
-        logger.info("Storing information in Qdrant...")
-
-        return {
-            "success": True,
-            "information": cleaned_content,
-            "storage_success": qdrant_storage_result["success"],
-            "error": None,
-        }
+        return response.model_dump()
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
-
-        # Store full content in MongoDB
-        mongo_result = await MongoDBManager.insert_web_content(
-            url=scrape_result["original_url"],
-            raw_text=scrape_result["all_text"],
-            headings=scrape_result["headings"],
-            llm_raw_response=None,
-            processed_content=None,
-            metadata=scrape_result["metadata"],
-            tenant_id=tenant_id,
-        )
-
-        logger.debug(f"Stored error information in MongoDB: {mongo_result.id}")
-
-        # Add the LLM processed result
-        processor.add_payload(
-            content={
-                "llm_response": None,
-                "all_text": scrape_result["information"]["all_text"][:TEXT_LIMIT],
-                "headings": scrape_result["information"]["headings"][:HEADING_LIMIT],
-                "mongo_id": str(mongo_result.id),
-            },
-            url=scrape_result["original_url"],
-        )
-
-        logger.debug("Successfully added payload to processor")
-
-        qdrant_storage_result = vectorize_information_to_qdrant(
-            vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id,
-            collection_name="web_content",
-        )
-
-        logger.debug("Storing information in Qdrant...")
-
         return {
             "success": False,
             "information": None,
-            "storage_success": qdrant_storage_result["success"],
+            "storage_success": False,
             "error": f"Error during information identification: {str(e)}",
+        }
+
+
+# Store result in MongoDB and handle exceptions
+async def store_result_in_mongodb(
+    scrape_result: dict, cleaned_llm_response: dict, tenant_id: UUID
+) -> dict:
+    """
+    Store the result in MongoDB
+    """
+    try:
+        mongo_result = await MongoDBManager.insert_web_content(
+            url=scrape_result["url"],
+            raw_text=scrape_result["information"]["all_text"],
+            headings=scrape_result["information"]["headings"],
+            llm_cleaned_content=cleaned_llm_response,
+            metadata=None,
+            tenant_id=tenant_id,
+        )
+        logger.info(f"Successfully stored result in MongoDB: {mongo_result.id}")
+        return {"success": True, "mongo_result": mongo_result}
+    except Exception as e:
+        logger.error(f"Error during MongoDB storage: {str(e)}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Error during MongoDB storage: {str(e)}",
+        }
+
+
+# Add payload and store in Qdrant, handling exceptions
+async def add_payload_and_store_in_qdrant(
+    processor: ContentProcessor, tenant_id: UUID
+) -> dict:
+    """
+    Add payload and store in Qdrant
+    """
+    try:
+        qdrant_storage_result = vectorize_information_to_qdrant(
+            vector_payloads=processor.get_payloads(),
+            tenant_id=tenant_id,
+            collection_name="web_content",
+        )
+        logger.info("Storing information in Qdrant...")
+        return {"success": True, "storage_success": qdrant_storage_result["success"]}
+    except Exception as e:
+        logger.error(f"Error during Qdrant storage: {str(e)}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Error during Qdrant storage: {str(e)}",
         }
 
 
 # Store the list of vector payloads into Qdrant
 def vectorize_information_to_qdrant(
-    vector_payloads: list, collection_name: str, tenant_id: str = None
+    vector_payloads: list, collection_name: str, tenant_id: UUID
 ) -> dict:
     """
     Store the processed information in Qdrant
@@ -248,77 +254,3 @@ def vectorize_information_to_qdrant(
     except Exception as e:
         logger.error(f"Failed to store information in Qdrant with error: {str(e)}")
         return {"success": False, "info": None, "error": str(e)}
-
-
-def get_prompts(scrape_result: dict):
-    """
-    Static system and user prompts for the LLM
-    """
-
-    example_raw_text = """
-    Introduction to Machine Learning ( ML ) represents a fundamental shift in how computers operate. Instead of following explicit programming instructions, these systems learn patterns from data. This revolutionary approach has transformed various industries and continues to drive innovation in technology. The field combines statistics, computer science, and data analysis to create powerful predictive models.
-
-    Among the various approaches in machine learning, Supervised Learning Methods stands as one of the most widely used techniques. In this method, algorithms learn from labeled datasets where the desired output is known. For instance, when training a model to recognize spam emails, we provide examples of both spam and legitimate emails. The algorithm learns to identify patterns and features that distinguish between these categories. Common algorithms include decision trees, which make sequential decisions based on data features, and support vector machines, which find optimal boundaries between different classes of data.
-
-    The impact of Deep Learning Applications on modern technology cannot be overstated. In healthcare, deep learning models analyze medical images to detect diseases with remarkable accuracy. Self-driving cars use deep learning to interpret their environment and make real-time decisions. Natural language processing applications powered by deep learning have made machine translation and voice assistants part of our daily lives.
-
-    Neural Networks and Deep Learning are at the core of these advances. These networks consist of layers of interconnected nodes, each performing specific computations. The \" deep \" in deep learning refers to the multiple layers that allow these networks to learn increasingly complex features. For example, in image recognition, early layers might detect simple edges, while deeper layers recognize complex objects like faces or vehicles.
-    """
-
-    example_input = [
-        {"Introduction to Machine Learning": "h1"},
-        {"Supervised Learning Methods": "h2"},
-        {"Deep Learning Applications": "h3"},
-        {"Neural Networks and Deep Learning": "h2"},
-    ]
-
-    example_output = {
-        "information": {
-            "headings": {
-                "Introduction to Machine Learning": "Machine learning represents a fundamental shift in how computers operate, enabling systems to learn patterns from data rather than following explicit programming instructions. This field combines statistics, computer science, and data analysis to create powerful predictive models.",
-                "Supervised Learning Methods": "Supervised learning algorithms learn from labeled datasets where the desired output is known, using techniques like decision trees and support vector machines to identify patterns and make predictions. This approach is widely used for classification tasks like spam detection.",
-                "Deep Learning Applications": "Deep learning has revolutionized multiple sectors, from healthcare (medical image analysis) to autonomous vehicles and natural language processing, enabling sophisticated real-time decision making and analysis.",
-                "Neural Networks and Deep Learning": "Neural networks are mathematical models inspired by the human brain, consisting of multiple layers of interconnected nodes that process information with increasing complexity. These layers progress from detecting simple features to recognizing complex patterns in data.",
-            }
-        }
-    }
-
-    system_prompt = """
-        You are a professional content analyst and information specialist who excels at extracting key information from documents.
-    
-        You are provided with both the full text and a structured list of headings from the document.
-    
-        Your role is to carefully analyze the content under each heading and produce clear, concise summaries that capture the essential information and main points.
-    """
-
-    user_prompt = f"""
-        Your task is to analyze the following text and extract key information for each heading:
-
-        ### CURRENT CONTENT TO ANALYZE ###
-        TEXT: {scrape_result["information"]["all_text"][:TEXT_LIMIT]}
-
-        HEADINGS: The document contains {len(scrape_result["information"]["headings"])} headings. 
-        First {HEADING_LIMIT} headings for reference: ```{scrape_result["information"]["headings"][:HEADING_LIMIT]}```
-
-        ### EXAMPLES ###
-        EXAMPLE RAW TEXT:
-        {example_raw_text}
-
-        EXAMPLE INPUT:
-        {example_input}
-
-        EXAMPLE OUTPUT:
-        {example_output}
-
-        ### REQUIREMENTS ###
-        For each heading:
-        1. Create a clear, factually accurate summary (1-2 sentences) that captures key points
-        2. Prioritize content based on heading importance (h1 > h2 > h3 etc.)
-        3. Ensure output follows the exact JSON structure shown in the example
-        4. Exclude any additional text or formatting
-    """
-
-    logger.info(f"System Prompt: {system_prompt}")
-    logger.info(f"User Prompt: {user_prompt}")
-
-    return system_prompt, user_prompt

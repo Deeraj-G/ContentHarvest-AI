@@ -1,25 +1,27 @@
 # Web Framework
-fastapi
+fastapi==0.115.10
+uvicorn==0.34.0
+python-multipart==0.0.20
 
 # Database
-motor
-beanie
-pymongo
-qdrant-client
+motor==3.7.0
+beanie==1.29.0
+pymongo==4.11.1
+qdrant-client==1.13.2
 
 # AI/ML
-openai
+openai==1.65.1
 
 # Web Scraping
-beautifulsoup4
-requests
+beautifulsoup4==4.13.3
+requests==2.32.3
 
 # Utils
-python-dotenv
-loguru
-pydantic-core
-typing-extensions
+python-dotenv==1.0.1
+loguru==0.7.3
+pydantic-core==4.12.2
+typing-extensions==4.12.2
 
 # Testing and Development
-pytest
-pytest-asyncio
+pytest==8.3.4
+pytest-asyncio==0.25.3
