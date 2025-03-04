@@ -5,6 +5,7 @@ This file contains the MongoDB models and operations using Beanie ODM.
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from motor.motor_asyncio import AsyncIOMotorClient
+from loguru import logger
 
 from backend.models.mongo.web_content import WebContent
 
@@ -19,23 +20,25 @@ class MongoDBManager:
     @classmethod
     def set_client(cls, client: AsyncIOMotorClient) -> None:
         """Set the MongoDB client instance"""
+        logger.info("Setting MongoDB client")
         cls._client = client
 
     @classmethod
     async def close_mongodb(cls) -> None:
         """Close the MongoDB connection"""
         if cls._client is not None:
+            logger.info("Closing MongoDB connection")
             cls._client.close()
             cls._client = None
 
     @staticmethod
     async def insert_web_content(
         url: str,
+        tenant_id: UUID,
         raw_text: str,
-        headings: List[Dict[str, Any]],
-        llm_cleaned_content: Dict[str, Any],
-        metadata: Dict[str, Any],
-        tenant_id: Optional[UUID] = None,
+        headings: Dict[str, Any],
+        llm_cleaned_content: Dict[str, Any] | None = None,
+        metadata: Dict[str, Any] | None = None,
     ) -> WebContent:
         """
         Insert web content into MongoDB.
@@ -61,7 +64,9 @@ class MongoDBManager:
         return await content.insert()
 
     @staticmethod
-    async def get_content_by_url(url: str, tenant_id: UUID = None) -> List[WebContent]:
+    async def get_content_by_url_and_tenant_id(
+        url: str, tenant_id: UUID
+    ) -> List[WebContent]:
         """
         Retrieve content by URL.
 
