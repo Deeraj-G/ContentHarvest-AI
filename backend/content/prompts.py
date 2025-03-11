@@ -48,27 +48,27 @@ def get_prompts(headings_subset: dict, limited_text: str):
 
         ### CURRENT CONTENT TO ANALYZE ###
         TEXT:
-        ```{limited_text}```
+        {limited_text}
 
         HEADINGS:
-        ```{headings_subset}```
+        {headings_subset}
 
         ### EXAMPLES ###
         EXAMPLE RAW TEXT:
-        ```{example_raw_text}```
+        {example_raw_text}
 
         EXAMPLE INPUT:
-        ```{example_input}```
+        {example_input}
 
         EXAMPLE OUTPUT:
-        ```{example_output}```
+        {example_output}
 
         ### REQUIREMENTS ###
         For each heading:
         1. Create a clear, factually accurate summary (1-2 sentences) that captures key points
         2. Prioritize content based on heading importance (h1 > h2 > h3 etc.)
         3. Ensure output follows the exact JSON structure shown in the example
-        4. Exclude any additional text or formatting
+        4. Do not include any text or formatting other than the JSON structure
     """
 
     return system_prompt, user_prompt
