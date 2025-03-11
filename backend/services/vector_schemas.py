@@ -5,7 +5,9 @@ This file contains the Pydantic models for the application.
 from datetime import datetime
 from typing import List, Dict, Any
 from uuid import UUID
+
 from pydantic import BaseModel
+from backend.utils.embedding_utils import get_embedding
 
 
 class VectorPayload(BaseModel):
@@ -31,11 +33,12 @@ class ContentProcessor(BaseModel):
 
         Args:
             content (dict): The content to be stored
-            content_type (str): Type of content (e.g., 'raw_scrape', 'processed_information')
             url (str): The source URL
         """
+        vector = get_embedding(content["input_text"])
+
         payload = VectorPayload(
-            vector=[1.0] * 1536,  # Placeholder vector
+            vector=vector,
             payload={
                 "url": url,
                 "tenant_id": self.tenant_id,
