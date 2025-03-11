@@ -19,6 +19,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+
 from loguru import logger
 
 from backend.models.rag.qdrant import QdrantVectorStore
@@ -119,12 +120,24 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
     ]
 
     # Call OpenAI API
-    llm_response = await call_openai_api(messages)
-    if not llm_response["success"]:
-        return llm_response
+    response = call_openai_api(messages)
+    if "success" not in response or not response["success"]:
+        return response
 
     # Clean the LLM response
-    cleaned_llm_response = json.loads(llm_response["choices"][0]["message"]["content"])
+    llm_response = response["llm_response"]["choices"][0]["message"]["content"]
+    logger.info(f"LLM response: {llm_response}")
+    cleaned_llm_response = llm_response.replace("```json", "").replace("```", "").strip()
+    try:
+        cleaned_llm_response = json.loads(cleaned_llm_response)
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing LLM response as JSON: {str(e)}")
+        return {
+            "success": False,
+            "information": None,
+            "storage_success": False,
+            "error": f"Error parsing LLM response as JSON: {str(e)}",
+        }
     logger.info(f"Cleaned LLM response: {cleaned_llm_response}")
 
     # Store result in MongoDB
@@ -149,22 +162,31 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
 
     # Store in Qdrant
     qdrant_response = await add_payload_and_store_in_qdrant(processor, tenant_id)
-    return qdrant_response
+    
+    return {
+        "success": True,
+        "information": cleaned_llm_response,
+        "storage_success": qdrant_response["storage_success"],
+        "error": None,
+    }
 
 
 # Call OpenAI API and handle exceptions
-async def call_openai_api(messages: list) -> dict:
+def call_openai_api(messages: list) -> dict:
     """
     Call OpenAI API
     """
     try:
         logger.info("Sending request to OpenAI...")
-        response = await client.chat.completions.create(
+        response =client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             timeout=30,
         )
-        return response.model_dump()
+        return {
+            "success": True,
+            "llm_response": response.model_dump(),
+        }
     except Exception as e:
         logger.error(f"Error during OpenAI API call: {str(e)}")
         return {
@@ -203,42 +225,23 @@ async def store_result_in_mongodb(
         }
 
 
-# Add payload and store in Qdrant, handling exceptions
+# Store the list of vector payloads into Qdrant
 async def add_payload_and_store_in_qdrant(
-    processor: ContentProcessor, tenant_id: UUID
+    processor: ContentProcessor, tenant_id: UUID, collection_name: str = "web_content"
 ) -> dict:
     """
     Add payload and store in Qdrant
-    """
-    try:
-        qdrant_storage_result = await vectorize_information_to_qdrant(
-            vector_payloads=processor.get_payloads(),
-            tenant_id=tenant_id,
-            collection_name="web_content",
-        )
-        logger.info("Storing information in Qdrant...")
-        return {"success": True, "storage_success": qdrant_storage_result["success"]}
-    except Exception as e:
-        logger.error(f"Error during Qdrant storage: {str(e)}")
-        return {
-            "success": False,
-            "information": None,
-            "storage_success": False,
-            "error": f"Error during Qdrant storage: {str(e)}",
-        }
-
-
-# Store the list of vector payloads into Qdrant
-async def vectorize_information_to_qdrant(
-    vector_payloads: list, collection_name: str, tenant_id: UUID
-) -> dict:
-    """
-    Store the processed information in Qdrant
-
+    
+    Args:
+        processor: ContentProcessor instance with payloads
+        tenant_id: UUID of the tenant
+        collection_name: Name of the Qdrant collection (default: "web_content")
+        
     Returns:
         dict: {
             "success": bool,
-            "info": dict | None,
+            "storage_success": bool,
+            "result": types.UpdateResult | None,
             "error": str | None
         }
     """
@@ -246,11 +249,18 @@ async def vectorize_information_to_qdrant(
         logger.info("Preparing to store information in Qdrant...")
         qdrant_client = QdrantVectorStore(tenant_id=tenant_id)
 
-        info = await qdrant_client.insert_data_to_qdrant(
+        vector_payloads = processor.get_payloads()
+        result = qdrant_client.insert_data_to_qdrant(
             vector_payloads=vector_payloads, collection_name=collection_name
         )
-        logger.info(f"Successfully stored information in Qdrant: {info}")
-        return {"success": True, "info": info, "error": None}
+        
+        logger.info(f"Successfully stored information in Qdrant: {result}")
+        return {"success": True, "storage_success": True, "result": result, "error": None}
     except Exception as e:
-        logger.error(f"Failed to store information in Qdrant with error: {str(e)}")
-        return {"success": False, "info": None, "error": str(e)}
+        logger.error(f"Error during Qdrant storage: {str(e)}")
+        return {
+            "success": False,
+            "storage_success": False,
+            "result": None,
+            "error": f"Error during Qdrant storage: {str(e)}",
+        }
