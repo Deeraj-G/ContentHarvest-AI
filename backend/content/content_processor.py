@@ -144,7 +144,7 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
     mongo_result_response = await store_result_in_mongodb(
         scrape_result, cleaned_llm_response, tenant_id
     )
-    if not mongo_result_response["success"]:
+    if "success" not in mongo_result_response or not mongo_result_response["success"]:
         return mongo_result_response
 
     # Add the LLM processed result
@@ -162,7 +162,15 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
 
     # Store in Qdrant
     qdrant_response = await add_payload_and_store_in_qdrant(processor, tenant_id)
-    
+
+    if "success" not in qdrant_response or not qdrant_response["success"]:
+        return {
+            "success": False,
+            "information": cleaned_llm_response,
+            "storage_success": False,
+            "error": qdrant_response["error"],
+        }
+
     return {
         "success": True,
         "information": cleaned_llm_response,
