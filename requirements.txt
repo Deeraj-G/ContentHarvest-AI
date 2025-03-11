@@ -19,7 +19,7 @@ requests==2.32.3
 # Utils
 python-dotenv==1.0.1
 loguru==0.7.3
-pydantic-core==4.12.2
+pydantic-core==2.31.1
 typing-extensions==4.12.2
 
 # Testing and Development
