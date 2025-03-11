@@ -6,7 +6,7 @@ A simple web scraper that scrapes a URL and returns the keywords and their assoc
 
 ```bash
 # Backend
-python3 -m backend.flask_app.main
+uvicorn backend.fastapi_app.main:app --reload
 
 # Frontend
 cd frontend && npm start

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './App.css';
 
 function App() {
+  const navigate = useNavigate();
   const params = useParams<{ tenant_id: string }>();
   console.log("Params:", params);
   const tenant_id = params.tenant_id;
@@ -42,6 +43,9 @@ function App() {
 
   return (
     <div className="App">
+      <button className="back-button" onClick={() => navigate('/')}>
+        ← Back to Dashboard
+      </button>
       <h1>Web Scraper</h1>
       <form onSubmit={handleSubmit}>
         <input
