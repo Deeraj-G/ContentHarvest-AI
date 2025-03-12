@@ -7,9 +7,9 @@ import uuid
 from uuid import UUID
 
 from dotenv import load_dotenv
+from loguru import logger
 from qdrant_client import QdrantClient, models
 from qdrant_client.models import PointStruct
-from loguru import logger
 
 from backend.services.embedding_utils import get_embedding
 
@@ -48,7 +48,9 @@ class QdrantVectorStore:
             Exception: If connection fails
         """
         try:
-            qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=10)
+            qdrant_client = QdrantClient(
+                url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=10
+            )
             return qdrant_client
         except Exception as e:
             raise Exception(f"Failed to connect to Qdrant: {str(e)}")
@@ -74,7 +76,7 @@ class QdrantVectorStore:
                     continue
                 vector = vector_set.get("vector")
                 payload = vector_set.get("payload", {})
-                
+
                 if not vector:
                     logger.error("Vector is missing or invalid")
                     continue
@@ -85,7 +87,11 @@ class QdrantVectorStore:
                     PointStruct(
                         id=str(uuid.uuid4()),
                         vector=vector,
-                        payload={**payload, "session_id": session_id, "tenant_id": self.tenant_id},
+                        payload={
+                            **payload,
+                            "session_id": session_id,
+                            "tenant_id": self.tenant_id,
+                        },
                     )
                 )
 
@@ -124,8 +130,7 @@ class QdrantVectorStore:
         query_filter = models.Filter(
             must=[
                 models.FieldCondition(
-                    key="tenant_id", 
-                    match=models.MatchValue(value=str(tenant_id))
+                    key="tenant_id", match=models.MatchValue(value=str(tenant_id))
                 )
             ]
         )
@@ -136,5 +141,5 @@ class QdrantVectorStore:
             query_vector=query_vector,
             query_filter=query_filter,
             limit=limit,
-            with_payload=True
+            with_payload=True,
         )

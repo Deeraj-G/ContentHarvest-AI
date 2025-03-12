@@ -2,11 +2,11 @@
 This file contains the initialization code for MongoDB connection using Beanie.
 """
 
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from backend.models.mongo.web_content import WebContent
 from backend.models.mongo.db_manager import MongoDBManager
+from backend.models.mongo.web_content import WebContent
 
 
 async def init_mongodb(mongodb_url: str, database_name: str):

@@ -3,16 +3,21 @@ This module contains the prompts for the content processor.
 """
 
 
-def get_prompts(headings_subset: dict, limited_text: str, output_context: str = None, input_context: str = None):
+def get_prompts(
+    headings_subset: dict,
+    limited_text: str,
+    output_context: str = None,
+    input_context: str = None,
+):
     """
     system and user prompts for the LLM
-    
+
     Args:
         headings_subset (dict): Dictionary of headings from the document
         limited_text (str): Text content from the document
         output_context (str): Optional output context from similar documents
         input_context (str): Optional input context from similar documents
-        
+
     Returns:
         tuple: (system_prompt, user_prompt)
     """
@@ -51,7 +56,7 @@ def get_prompts(headings_subset: dict, limited_text: str, output_context: str = 
     
         Your role is to carefully analyze the content under each heading and produce clear, concise summaries that capture the essential information and main points.
     """
-    
+
     # Add relevant context if available
     if output_context:
         system_prompt += f"""

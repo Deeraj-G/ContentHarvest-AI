@@ -3,8 +3,9 @@ This file contains the Pydantic models for the application.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from uuid import UUID
+
 from pydantic import BaseModel
 
 from backend.services.embedding_utils import get_embedding

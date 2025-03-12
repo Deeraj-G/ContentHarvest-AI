@@ -3,17 +3,18 @@ Host the FastAPI app.
 """
 
 import os
-from uuid import UUID
 from contextlib import asynccontextmanager
 from http import HTTPStatus
+from uuid import UUID
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 from loguru import logger
 
 from backend.content.content_processor import (
-    vectorize_and_store_web_content,
     scrape_url,
+    vectorize_and_store_web_content,
 )
 from backend.models.mongo.db_init import init_mongodb
 from backend.models.mongo.db_manager import MongoDBManager
@@ -30,10 +31,13 @@ app = FastAPI()
 async def lifespan(fastapi_app: FastAPI):
     """Lifecycle manager for FastAPI app"""
     await init_mongodb(MONGODB_URL, DATABASE_NAME)
+    logger.info("MongoDB connection initialized")
     yield
+    logger.info("Shutting down MongoDB connection")
     await MongoDBManager.close_mongodb()
 
 
+# Update the original app declaration with lifespan
 app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware
@@ -47,23 +51,21 @@ app.add_middleware(
 
 
 @app.post("/v1/tenants/{tenant_id}/scrape/")
-async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
+async def scrape_endpoint(tenant_id: UUID, url: str = Form(...)):
     """
-    This endpoint handles the web scraper.
+    Scrape content from a URL and process it for a specific tenant.
+
+    Args:
+        tenant_id: The UUID of the tenant
+        url: The URL to scrape
+
+    Returns:
+        dict: Result of the scraping and processing operation
     """
-
-    if not tenant_id:
-        return {
-            "content": {
-                "success": False,
-                "error": "Tenant ID is required",
-            },
-            "status": HTTPStatus.BAD_REQUEST,
-        }
-
     try:
-        logger.info(f"web scrape started for tenant: {tenant_id}")
-        scrape_result = await scrape_url(url)  # This is sync
+        logger.info(f"Web scrape started for tenant: {tenant_id}")
+        scrape_result = await scrape_url(url)
+
         if not scrape_result["success"]:
             return {
                 "content": {
@@ -75,10 +77,11 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
             }
 
         process_result = await vectorize_and_store_web_content(
-            scrape_result, tenant_id=UUID(tenant_id)
+            scrape_result, tenant_id=tenant_id  # No need to convert to UUID again
         )
         return {"content": process_result, "status": HTTPStatus.OK}
     except Exception as e:
+        logger.error(f"Error during scraping process: {str(e)}")
         return {
             "content": {
                 "success": False,

@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict
 from uuid import UUID
+
 from beanie import Document
 from pydantic import Field
 
