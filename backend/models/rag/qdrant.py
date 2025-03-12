@@ -11,6 +11,8 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.models import PointStruct
 from loguru import logger
 
+from backend.services.embedding_utils import get_embedding
+
 load_dotenv()
 
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -46,12 +48,12 @@ class QdrantVectorStore:
             Exception: If connection fails
         """
         try:
-            qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+            qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=10)
             return qdrant_client
         except Exception as e:
             raise Exception(f"Failed to connect to Qdrant: {str(e)}")
 
-    async def insert_data_to_qdrant(self, vector_payloads: list, collection_name: str):
+    def insert_data_to_qdrant(self, vector_payloads: list, collection_name: str):
         """
         Insert vector embeddings and their associated payloads into Qdrant
 
@@ -65,28 +67,43 @@ class QdrantVectorStore:
         """
         session_id = str(uuid.uuid4())  # Create one session_id for the group
         try:
-            info = await self.client.upsert(
-                collection_name=collection_name,
-                wait=True,  # Wait for operation to complete
-                points=[
-                    PointStruct(
-                        id=str(uuid.uuid4()),  # Unique ID for each point
-                        vector=vector_set.get("vector"),
-                        payload={
-                            **vector_set.get("payload", {}),  # Spread existing payload
-                            "session_id": session_id,  # Add session_id to payload
-                        },
-                    )
-                    for vector_set in vector_payloads
-                ],
-            )
+            points = []
+            for vector_set in vector_payloads:
+                if not isinstance(vector_set, dict):
+                    logger.error(f"Invalid vector_set type: {type(vector_set)}")
+                    continue
+                vector = vector_set.get("vector")
+                payload = vector_set.get("payload", {})
+                
+                if not vector:
+                    logger.error("Vector is missing or invalid")
+                    continue
 
+                logger.info("Inserting payload")
+
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vector,
+                        payload={**payload, "session_id": session_id, "tenant_id": self.tenant_id},
+                    )
+                )
+
+            if not points:
+                raise Exception("No valid points to insert")
+
+            info = self.client.upsert(
+                collection_name=collection_name,
+                wait=True,
+                points=points,
+            )
+            logger.info(f"Successfully inserted {len(points)} points into Qdrant")
             return info
         except Exception as e:
             logger.error(f"Error inserting data to Qdrant: {e}")
             raise e
 
-    async def search_data_from_qdrant(
+    def search_data_in_qdrant(
         self, collection_name: str, query: str, tenant_id: UUID, limit: int = 5
     ):
         """
@@ -96,25 +113,28 @@ class QdrantVectorStore:
             collection_name (str): Name of the Qdrant collection to search in
             query (str): The search query text
             tenant_id (UUID): filter to search for specific tenant_id
-            limit (int): Maximum number of results to return (default: 10)
+            limit (int): Maximum number of results to return (default: 5)
 
         Returns:
             List of search results from Qdrant, ordered by relevance
         """
-        # Initialize empty filter list for search conditions
-        filter_list = []
+        query_vector = get_embedding(query)
 
-        # If tenant_id is provided, add it as a filter condition
-        filter_list.append(
-            models.FieldCondition(
-                key="tenant_id", match=models.MatchValue(value=tenant_id)
-            )
+        # Create filter for tenant_id
+        query_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="tenant_id", 
+                    match=models.MatchValue(value=str(tenant_id))
+                )
+            ]
         )
 
         # Perform the search using Qdrant client
-        return await self.client.search(
+        return self.client.search(
             collection_name=collection_name,
-            query_vector=query,
-            tenant_id=tenant_id,
+            query_vector=query_vector,
+            query_filter=query_filter,
             limit=limit,
+            with_payload=True
         )

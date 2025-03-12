@@ -69,8 +69,9 @@ async def scrape_endpoint(tenant_id: str, url: str = Form(...)):
                 "content": {
                     "success": False,
                     "error": f"Scraping failed: {scrape_result['error']}",
+                    "status_code": scrape_result["status_code"],
                 },
-                "status": HTTPStatus.BAD_REQUEST,
+                "status": scrape_result["status_code"],
             }
 
         process_result = await vectorize_and_store_web_content(
