@@ -5,7 +5,6 @@ import './App.css';
 function App() {
   const navigate = useNavigate();
   const params = useParams<{ tenant_id: string }>();
-  console.log("Params:", params);
   const tenant_id = params.tenant_id;
   const [url, setUrl] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -16,6 +15,7 @@ function App() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    
     if (!tenant_id) {
       setError('Error: Tenant ID is undefined');
       setLoading(false);

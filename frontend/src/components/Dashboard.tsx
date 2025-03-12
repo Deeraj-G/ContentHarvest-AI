@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
-const Dashboard: React.FC = () => {
+function Dashboard() {
   const navigate = useNavigate();
   // TODO: In a real app, this would come from configuration or API
   const defaultTenantId = '66efb688-8cd2-4381-9400-31a7b61e6209';
@@ -19,6 +19,6 @@ const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Dashboard; 

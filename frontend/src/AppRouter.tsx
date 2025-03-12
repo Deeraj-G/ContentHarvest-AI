@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import App from './App';
 import Dashboard from './components/Dashboard';
 
-const AppRouter: React.FC = () => {
+function AppRouter() {
   return (
     <Router>
       <Routes>
@@ -12,6 +12,6 @@ const AppRouter: React.FC = () => {
       </Routes>
     </Router>
   );
-};
+}
 
 export default AppRouter;
