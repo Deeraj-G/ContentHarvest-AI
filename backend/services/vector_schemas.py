@@ -5,9 +5,9 @@ This file contains the Pydantic models for the application.
 from datetime import datetime
 from typing import List, Dict, Any
 from uuid import UUID
-
 from pydantic import BaseModel
-from backend.utils.embedding_utils import get_embedding
+
+from backend.services.embedding_utils import get_embedding
 
 
 class VectorPayload(BaseModel):
