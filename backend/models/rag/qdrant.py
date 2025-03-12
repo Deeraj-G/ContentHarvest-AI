@@ -11,6 +11,8 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.models import PointStruct
 from loguru import logger
 
+from backend.services.embedding_utils import get_embedding
+
 load_dotenv()
 
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -89,8 +91,6 @@ class QdrantVectorStore:
 
             if not points:
                 raise Exception("No valid points to insert")
-            
-            logger.info(f"Points inserted: {points}")
 
             info = self.client.upsert(
                 collection_name=collection_name,
@@ -103,7 +103,7 @@ class QdrantVectorStore:
             logger.error(f"Error inserting data to Qdrant: {e}")
             raise e
 
-    async def search_data_from_qdrant(
+    def search_data_in_qdrant(
         self, collection_name: str, query: str, tenant_id: UUID, limit: int = 5
     ):
         """
@@ -113,25 +113,28 @@ class QdrantVectorStore:
             collection_name (str): Name of the Qdrant collection to search in
             query (str): The search query text
             tenant_id (UUID): filter to search for specific tenant_id
-            limit (int): Maximum number of results to return (default: 10)
+            limit (int): Maximum number of results to return (default: 5)
 
         Returns:
             List of search results from Qdrant, ordered by relevance
         """
-        # Initialize empty filter list for search conditions
-        filter_list = []
+        query_vector = get_embedding(query)
 
-        # If tenant_id is provided, add it as a filter condition
-        filter_list.append(
-            models.FieldCondition(
-                key="tenant_id", match=models.MatchValue(value=tenant_id)
-            )
+        # Create filter for tenant_id
+        query_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="tenant_id", 
+                    match=models.MatchValue(value=str(tenant_id))
+                )
+            ]
         )
 
         # Perform the search using Qdrant client
-        return await self.client.search(
+        return self.client.search(
             collection_name=collection_name,
-            query_vector=query,
-            tenant_id=tenant_id,
+            query_vector=query_vector,
+            query_filter=query_filter,
             limit=limit,
+            with_payload=True
         )
