@@ -2,10 +2,11 @@
 This file contains the MongoDB models and operations using Beanie ODM.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-from motor.motor_asyncio import AsyncIOMotorClient
+
 from loguru import logger
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from backend.models.mongo.web_content import WebContent
 

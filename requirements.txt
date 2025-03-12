@@ -25,3 +25,7 @@ typing-extensions==4.12.2
 # Testing and Development
 pytest==8.3.4
 pytest-asyncio==0.25.3
+
+# Linters
+black==25.1.0
+isort==6.0.1

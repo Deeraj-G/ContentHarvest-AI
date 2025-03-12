@@ -10,26 +10,24 @@ Key features:
 Essential for building a content ingestion pipeline that transforms raw web data into structured, searchable information.
 """
 
+import json
 import os
 import re
-import json
 from uuid import UUID
 
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from loguru import logger
 from openai import OpenAI
 
-from loguru import logger
-
+from backend.content.prompts import get_prompts
+from backend.models.mongo.db_manager import MongoDBManager
 from backend.models.rag.qdrant import QdrantVectorStore
 from backend.services.vector_schemas import ContentProcessor
-from backend.models.mongo.db_manager import MongoDBManager
-from backend.content.prompts import get_prompts
 
-
-TEXT_LIMIT = 4000
-HEADING_LIMIT = 10
+TEXT_LIMIT = 6000
+HEADING_LIMIT = 6
 
 load_dotenv()
 
@@ -64,7 +62,7 @@ async def scrape_url(url: str) -> dict:
                 "information": None,
                 "success": False,
                 "error": f"Failed to scrape URL: {url}",
-                "status_code": response.status_code
+                "status_code": response.status_code,
             }
         soup = BeautifulSoup(response.text, "html.parser")
         all_text = soup.get_text(separator=" ")
@@ -85,7 +83,7 @@ async def scrape_url(url: str) -> dict:
             "information": {"all_text": all_text, "headings": headings},
             "success": True,
             "error": None,
-            "status_code": response.status_code
+            "status_code": response.status_code,
         }
 
     except Exception as e:
@@ -95,7 +93,7 @@ async def scrape_url(url: str) -> dict:
             "information": None,
             "success": False,
             "error": str(e),
-            "status_code": response.status_code
+            "status_code": response.status_code,
         }
 
 
@@ -126,12 +124,12 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
         query_text = collected_headings["h1"][0]
     elif scrape_result["url"]:
         query_text = scrape_result["url"]
-    
+
     # Get relevant context if we have a query
     relevant_context = ""
     if query_text:
         relevant_context = await get_relevant_context(query_text, tenant_id)
-    
+
     # Get prompts with relevant context
     system_prompt, user_prompt = get_prompts(
         headings_subset=collected_headings,
@@ -156,7 +154,9 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
     # Clean the LLM response
     llm_response = response["llm_response"]["choices"][0]["message"]["content"]
     logger.info(f"LLM response: {llm_response}")
-    cleaned_llm_response = llm_response.replace("```json", "").replace("```", "").strip()
+    cleaned_llm_response = (
+        llm_response.replace("```json", "").replace("```", "").strip()
+    )
     try:
         cleaned_llm_response = json.loads(cleaned_llm_response)
     except json.JSONDecodeError as e:
@@ -209,15 +209,20 @@ async def vectorize_and_store_web_content(scrape_result: dict, tenant_id: UUID) 
 
 
 # Retrieve context from Qdrant
-async def get_relevant_context(query: str, tenant_id: UUID, collection_name: str = "web_content", qdrant_client: QdrantVectorStore = None) -> str:
+async def get_relevant_context(
+    query: str,
+    tenant_id: UUID,
+    collection_name: str = "web_content",
+    qdrant_client: QdrantVectorStore = None,
+) -> str:
     """
     Retrieve relevant context from Qdrant based on the query
-    
+
     Args:
         query (str): The search query
         tenant_id (UUID): Tenant ID for filtering results
         collection_name (str): Name of the Qdrant collection
-        
+
     Returns:
         str: Formatted context from relevant documents
     """
@@ -228,13 +233,13 @@ async def get_relevant_context(query: str, tenant_id: UUID, collection_name: str
             collection_name=collection_name,
             query=query,
             tenant_id=tenant_id,
-            limit=3  # Limit to top 3 most relevant results
+            limit=3,  # Limit to top 3 most relevant results
         )
-        
+
         if not search_results:
             logger.info("No relevant context found in Qdrant")
             return None
-        
+
         # Format the context from search results
         output_context = []
         input_context = []
@@ -243,7 +248,7 @@ async def get_relevant_context(query: str, tenant_id: UUID, collection_name: str
 
             # Extract cleaned LLM response and input headings from payload if available,
             # format them as JSON strings and append to respective context lists.
-            # Log warning if payload structure is unexpected.            
+            # Log warning if payload structure is unexpected.
             if "content" in payload and isinstance(payload["content"], dict):
                 if "cleaned_llm_response" in payload["content"]:
                     content = payload["content"]["cleaned_llm_response"]
@@ -257,8 +262,11 @@ async def get_relevant_context(query: str, tenant_id: UUID, collection_name: str
                     logger.warning(f"Unexpected payload structure for Document {i+1}")
             else:
                 logger.warning(f"Unexpected payload structure for Document {i+1}")
-        
-        return {"output_context": "\n\n".join(output_context), "input_context": "\n\n".join(input_context)}
+
+        return {
+            "output_context": "\n\n".join(output_context),
+            "input_context": "\n\n".join(input_context),
+        }
     except Exception as e:
         logger.error(f"Error retrieving context from Qdrant: {str(e)}")
         return ""
@@ -271,7 +279,7 @@ def call_openai_api(messages: list) -> dict:
     """
     try:
         logger.info("Sending request to OpenAI...")
-        response =client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             timeout=30,
@@ -320,16 +328,19 @@ async def store_result_in_mongodb(
 
 # Store the list of vector payloads into Qdrant
 async def add_payload_and_store_in_qdrant(
-    processor: ContentProcessor, tenant_id: UUID, collection_name: str = "web_content", qdrant_client: QdrantVectorStore = None
+    processor: ContentProcessor,
+    tenant_id: UUID,
+    collection_name: str = "web_content",
+    qdrant_client: QdrantVectorStore = None,
 ) -> dict:
     """
     Add payload and store in Qdrant
-    
+
     Args:
         processor: ContentProcessor instance with payloads
         tenant_id: UUID of the tenant
         collection_name: Name of the Qdrant collection (default: "web_content")
-        
+
     Returns:
         dict: {
             "success": bool,
@@ -347,9 +358,14 @@ async def add_payload_and_store_in_qdrant(
         result = qdrant_client.insert_data_to_qdrant(
             vector_payloads=vector_payloads, collection_name=collection_name
         )
-        
+
         logger.info(f"Successfully stored information in Qdrant: {result}")
-        return {"success": True, "storage_success": True, "result": result, "error": None}
+        return {
+            "success": True,
+            "storage_success": True,
+            "result": result,
+            "error": None,
+        }
     except Exception as e:
         logger.error(f"Error during Qdrant storage: {str(e)}")
         return {
