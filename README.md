@@ -1,10 +1,10 @@
-# Web Scraper
+# ContentHarvest AI
 
-A full-stack web application for scraping, processing, and storing web content into a structured format with advanced features including content vectorization and multi-tenant support.
+A full-stack web application for harvesting, processing, and storing web content into a structured format with advanced features including content vectorization and multi-tenant support.
 
 ## Features
 
-- **Web Scraping**: Extract content from any URL using BeautifulSoup4
+- **Content Harvesting**: Extract content from any URL using BeautifulSoup4
 - **Content Processing**: Analyze and process web content
 - **Vector Storage**: Store processed content in vector database (Qdrant)
 - **MongoDB Integration**: Persist metadata and results
@@ -116,4 +116,4 @@ web_scraper/
 
 ## License
 
-[MIT](LICENSE)
+[GNU AGPLv3](LICENSE)
