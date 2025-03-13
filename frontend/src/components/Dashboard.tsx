@@ -9,11 +9,11 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <h1>Web Scraper Dashboard</h1>
+      <h1>ContentHarvest Dashboard</h1>
       <div className="dashboard-content">
         <div className="dashboard-card" 
-             onClick={() => navigate(`/v1/tenants/${defaultTenantId}/scrape/`)}>
-          <h2>Web Scraper Tool</h2>
+             onClick={() => navigate(`/v1/tenants/${defaultTenantId}/harvest/`)}>
+          <h2>Content Harvest Tool</h2>
           <p>Extract data from any website using our scraping tool</p>
         </div>
       </div>

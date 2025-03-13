@@ -50,10 +50,10 @@ app.add_middleware(
 )
 
 
-@app.post("/v1/tenants/{tenant_id}/scrape/")
-async def scrape_endpoint(tenant_id: UUID, url: str = Form(...)):
+@app.post("/v1/tenants/{tenant_id}/harvest/")
+async def harvest_endpoint(tenant_id: UUID, url: str = Form(...)):
     """
-    Scrape content from a URL and process it for a specific tenant.
+    Harvest content from a URL and process it for a specific tenant.
 
     Args:
         tenant_id: The UUID of the tenant
@@ -63,7 +63,7 @@ async def scrape_endpoint(tenant_id: UUID, url: str = Form(...)):
         dict: Result of the scraping and processing operation
     """
     try:
-        logger.info(f"Web scrape started for tenant: {tenant_id}")
+        logger.info(f"Content Harvest started for tenant: {tenant_id}")
         scrape_result = await scrape_url(url)
 
         if not scrape_result["success"]:
