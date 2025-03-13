@@ -23,7 +23,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/v1/tenants/${tenant_id}/scrape/`, {
+      const response = await fetch(`http://localhost:8000/v1/tenants/${tenant_id}/harvest/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -46,7 +46,7 @@ function App() {
       <button className="back-button" onClick={() => navigate('/')}>
         ← Back to Dashboard
       </button>
-      <h1>Web Scraper</h1>
+      <h1>Content Harvester</h1>
       <form onSubmit={handleSubmit}>
         <input
           type="url"
@@ -56,7 +56,7 @@ function App() {
           required
         />
         <button type="submit" disabled={loading}>
-          {loading ? 'Scraping...' : 'Scrape'}
+          {loading ? 'Harvesting...' : 'Harvest'}
         </button>
       </form>
       {error && (
