@@ -68,9 +68,10 @@ async def harvest_endpoint(tenant_id: UUID, url: str = Form(...)):
 
         if not scrape_result["success"]:
             return {
-                "content": {
-                    "success": False,
-                    "error": f"Scraping failed: {scrape_result['error']}",
+                "content":  {
+                    "information": scrape_result["information"],
+                    "success": scrape_result["success"],
+                    "error": scrape_result["error"],
                     "status_code": scrape_result["status_code"],
                 },
                 "status": scrape_result["status_code"],

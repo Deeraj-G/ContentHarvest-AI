@@ -56,12 +56,12 @@ async def scrape_url(url: str) -> dict:
         response = requests.get(url, timeout=10)
 
         if response.status_code != 200:
-            logger.error(f"Failed to scrape URL {url}: {response.status_code}")
+            logger.error(f"Failed to harvest URL {url}: {response.status_code}")
             return {
                 "url": url,
                 "information": None,
                 "success": False,
-                "error": f"Failed to scrape URL: {url}",
+                "error": f"Failed to harvest URL: {url}",
                 "status_code": response.status_code,
             }
         soup = BeautifulSoup(response.text, "html.parser")
@@ -87,7 +87,7 @@ async def scrape_url(url: str) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"Error scraping URL {url}: {str(e)}")
+        logger.error(f"Error harvesting URL {url}: {str(e)}")
         return {
             "url": url,
             "information": None,
