@@ -102,7 +102,7 @@ curl -v http://localhost:8000/v1/tenants/66efb688-8cd2-4381-9400-31a7b61e6209/sc
 ### Project Structure
 
 ```
-web_scraper/
+ContentHarvest-AI/
 ├── backend/
 │   ├── content/           # Content processing logic
 │   ├── fastapi_app/       # FastAPI application
