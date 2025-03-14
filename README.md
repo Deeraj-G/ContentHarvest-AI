@@ -86,7 +86,7 @@ npm start
 ### Using the Application
 
 1. Open your browser and navigate to `http://localhost:3000`
-2. From the dashboard, click on the Web Scraper Tool
+2. From the dashboard, click on the Content Harvester Tool
 3. Enter a URL to scrape
 4. View the processed results
 
