@@ -56,7 +56,12 @@ class ContentProcessor(BaseModel):
         Returns:
             List[Dict[str, Any]]: List of vector payloads
         """
-        return [payload.model_dump() for payload in self.vector_payloads]
+        # For Pydantic v1
+        try:
+            return [payload.dict() for payload in self.vector_payloads]
+        # For Pydantic v2
+        except AttributeError:
+            return [payload.model_dump() for payload in self.vector_payloads]
 
     def clear_payloads(self) -> None:
         """
