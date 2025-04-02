@@ -51,7 +51,7 @@ app.add_middleware(
 
 
 @app.post("/v1/tenants/{tenant_id}/harvest/")
-async def harvest_endpoint(tenant_id: UUID, url: str = Form(...)):
+async def harvest_content(tenant_id: UUID, url: str = Form(...)):
     """
     Harvest content from a URL and process it for a specific tenant.
 
@@ -90,3 +90,18 @@ async def harvest_endpoint(tenant_id: UUID, url: str = Form(...)):
             },
             "status": HTTPStatus.INTERNAL_SERVER_ERROR,
         }
+    
+
+@app.post("/v1/tenants/{tenant_id}/retrieve/")
+async def retrieve_content(tenant_id: UUID, search_query: str = Form(...)):
+    """
+    Retrieve relevant content from Qdrant for a specific tenant.
+
+    Args:
+        tenant_id: The UUID of the tenant
+        search_query: The search query to retrieve content for
+
+    Returns:
+        dict: Result of the retrieval operation
+    """
+    pass
