@@ -16,6 +16,7 @@ from backend.content.content_processor import (
     scrape_url,
     vectorize_and_store_web_content,
 )
+from backend.content.search_retrieval import search_retrieval
 from backend.models.mongo.db_init import init_mongodb
 from backend.models.mongo.db_manager import MongoDBManager
 
@@ -78,7 +79,7 @@ async def harvest_content(tenant_id: UUID, url: str = Form(...)):
             }
 
         process_result = await vectorize_and_store_web_content(
-            scrape_result, tenant_id=tenant_id  # No need to convert to UUID again
+            scrape_result, tenant_id=tenant_id
         )
         return {"content": process_result, "status": HTTPStatus.OK}
     except Exception as e:
@@ -104,4 +105,9 @@ async def retrieve_content(tenant_id: UUID, search_query: str = Form(...)):
     Returns:
         dict: Result of the retrieval operation
     """
-    pass
+    try:
+        retrieval_result = await search_retrieval(search_query, tenant_id)
+        return {"content": retrieval_result, "status": HTTPStatus.OK}
+    except Exception as e:
+        logger.error(f"Error during retrieval process: {str(e)}")
+        return {"content": {"success": False, "error": f"Error during retrieval: {str(e)}"}, "status": HTTPStatus.INTERNAL_SERVER_ERROR}
