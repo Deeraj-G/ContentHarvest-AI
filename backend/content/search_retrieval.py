@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from uuid import UUID
 
 from backend.services.embedding_utils import get_embedding
+from backend.models.rag.qdrant import QdrantVectorStore
 
 load_dotenv()
 
