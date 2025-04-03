@@ -9,7 +9,7 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <h1>ContentHarvest Dashboard</h1>
+      <h1>ContentHarvest</h1>
       <div className="dashboard-content">
         <div className="dashboard-card" 
              onClick={() => navigate(`/v1/tenants/${defaultTenantId}/harvest/`)}>
