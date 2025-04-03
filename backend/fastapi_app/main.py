@@ -12,10 +12,8 @@ from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from backend.content.content_processor import (
-    scrape_url,
-    vectorize_and_store_web_content,
-)
+from backend.content.content_processor import (scrape_url,
+                                               vectorize_and_store_web_content)
 from backend.content.search_retrieval import search_retrieval
 from backend.models.mongo.db_init import init_mongodb
 from backend.models.mongo.db_manager import MongoDBManager
@@ -69,7 +67,7 @@ async def harvest_content(tenant_id: UUID, url: str = Form(...)):
 
         if not scrape_result["success"]:
             return {
-                "content":  {
+                "content": {
                     "information": scrape_result["information"],
                     "success": scrape_result["success"],
                     "error": scrape_result["error"],
@@ -91,7 +89,7 @@ async def harvest_content(tenant_id: UUID, url: str = Form(...)):
             },
             "status": HTTPStatus.INTERNAL_SERVER_ERROR,
         }
-    
+
 
 @app.post("/v1/tenants/{tenant_id}/retrieve/")
 async def retrieve_content(tenant_id: UUID, search_query: str = Form(...)):
@@ -110,4 +108,7 @@ async def retrieve_content(tenant_id: UUID, search_query: str = Form(...)):
         return {"content": retrieval_result, "status": HTTPStatus.OK}
     except Exception as e:
         logger.error(f"Error during retrieval process: {str(e)}")
-        return {"content": {"success": False, "error": f"Error during retrieval: {str(e)}"}, "status": HTTPStatus.INTERNAL_SERVER_ERROR}
+        return {
+            "content": {"success": False, "error": f"Error during retrieval: {str(e)}"},
+            "status": HTTPStatus.INTERNAL_SERVER_ERROR,
+        }
